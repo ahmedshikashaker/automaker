@@ -1,157 +1,17 @@
-import { test, expect, Page } from "@playwright/test";
-import * as fs from "fs";
-import * as path from "path";
-
-// Resolve the workspace root - handle both running from apps/app and from root
-function getWorkspaceRoot(): string {
-  const cwd = process.cwd();
-  if (cwd.includes("apps/app")) {
-    return path.resolve(cwd, "../..");
-  }
-  return cwd;
-}
-
-const WORKSPACE_ROOT = getWorkspaceRoot();
-const FIXTURE_PATH = path.join(WORKSPACE_ROOT, "test/fixtures/projectA");
-const SPEC_FILE_PATH = path.join(FIXTURE_PATH, ".automaker/app_spec.txt");
-
-// Original spec content for resetting between tests
-const ORIGINAL_SPEC_CONTENT = `<app_spec>
-  <name>Test Project A</name>
-  <description>A test fixture project for Playwright testing</description>
-  <tech_stack>
-    <item>TypeScript</item>
-    <item>React</item>
-  </tech_stack>
-</app_spec>
-`;
-
-/**
- * Reset the fixture's app_spec.txt to original content
- */
-function resetFixtureSpec() {
-  const dir = path.dirname(SPEC_FILE_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(SPEC_FILE_PATH, ORIGINAL_SPEC_CONTENT);
-}
-
-/**
- * Set up localStorage with a project pointing to our test fixture
- * Note: In CI, setup wizard is also skipped via NEXT_PUBLIC_SKIP_SETUP env var
- */
-async function setupProjectWithFixture(page: Page, projectPath: string) {
-  await page.addInitScript((path: string) => {
-    const mockProject = {
-      id: "test-project-fixture",
-      name: "projectA",
-      path: path,
-      lastOpened: new Date().toISOString(),
-    };
-
-    const mockState = {
-      state: {
-        projects: [mockProject],
-        currentProject: mockProject,
-        currentView: "board",
-        theme: "dark",
-        sidebarOpen: true,
-        apiKeys: { anthropic: "", google: "" },
-        chatSessions: [],
-        chatHistoryOpen: false,
-        maxConcurrency: 3,
-      },
-      version: 0,
-    };
-
-    localStorage.setItem("automaker-storage", JSON.stringify(mockState));
-
-    // Also mark setup as complete (fallback for when NEXT_PUBLIC_SKIP_SETUP isn't set)
-    const setupState = {
-      state: {
-        isFirstRun: false,
-        setupComplete: true,
-        currentStep: "complete",
-        skipClaudeSetup: false,
-      },
-      version: 0,
-    };
-    localStorage.setItem("automaker-setup", JSON.stringify(setupState));
-  }, projectPath);
-}
-
-/**
- * Navigate to spec editor via sidebar
- */
-async function navigateToSpecEditor(page: Page) {
-  // Click on the Spec Editor nav item in the sidebar
-  const specNavButton = page.locator('[data-testid="nav-spec"]');
-  await specNavButton.waitFor({ state: "visible", timeout: 10000 });
-  await specNavButton.click();
-
-  // Wait for the spec view to be visible
-  await page.waitForSelector('[data-testid="spec-view"]', { timeout: 10000 });
-}
-
-/**
- * Get the CodeMirror editor content
- */
-async function getEditorContent(page: Page): Promise<string> {
-  // CodeMirror uses a contenteditable div with class .cm-content
-  const content = await page
-    .locator('[data-testid="spec-editor"] .cm-content')
-    .textContent();
-  return content || "";
-}
-
-/**
- * Set the CodeMirror editor content by selecting all and typing
- */
-async function setEditorContent(page: Page, content: string) {
-  // Click on the editor to focus it
-  const editor = page.locator('[data-testid="spec-editor"] .cm-content');
-  await editor.click();
-
-  // Wait for focus
-  await page.waitForTimeout(200);
-
-  // Select all content (Cmd+A on Mac, Ctrl+A on others)
-  const isMac = process.platform === "darwin";
-  await page.keyboard.press(isMac ? "Meta+a" : "Control+a");
-
-  // Wait for selection
-  await page.waitForTimeout(100);
-
-  // Delete the selected content first
-  await page.keyboard.press("Backspace");
-
-  // Wait for deletion
-  await page.waitForTimeout(100);
-
-  // Type the new content
-  await page.keyboard.type(content, { delay: 10 });
-
-  // Wait for typing to complete
-  await page.waitForTimeout(200);
-}
-
-/**
- * Click the save button
- */
-async function clickSaveButton(page: Page) {
-  const saveButton = page.locator('[data-testid="save-spec"]');
-  await saveButton.click();
-
-  // Wait for the button text to change to "Saved" indicating save is complete
-  await page.waitForFunction(
-    () => {
-      const btn = document.querySelector('[data-testid="save-spec"]');
-      return btn?.textContent?.includes("Saved");
-    },
-    { timeout: 5000 }
-  );
-}
+import { test, expect } from "@playwright/test";
+import {
+  resetFixtureSpec,
+  setupProjectWithFixture,
+  getFixturePath,
+  navigateToSpecEditor,
+  getEditorContent,
+  setEditorContent,
+  clickSaveButton,
+  getByTestId,
+  clickElement,
+  fillInput,
+  waitForNetworkIdle,
+} from "./utils";
 
 test.describe("Spec Editor Persistence", () => {
   test.beforeEach(async () => {
@@ -168,25 +28,25 @@ test.describe("Spec Editor Persistence", () => {
     page,
   }) => {
     // Use the resolved fixture path
-    const fixturePath = FIXTURE_PATH;
+    const fixturePath = getFixturePath();
 
     // Step 1: Set up the project in localStorage pointing to our fixture
     await setupProjectWithFixture(page, fixturePath);
 
     // Step 2: Navigate to the app
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await waitForNetworkIdle(page);
 
     // Step 3: Verify we're on the dashboard with the project loaded
     // The sidebar should show the project selector
-    const sidebar = page.locator('[data-testid="sidebar"]');
+    const sidebar = await getByTestId(page, "sidebar");
     await sidebar.waitFor({ state: "visible", timeout: 10000 });
 
     // Step 4: Click on the Spec Editor in the sidebar
     await navigateToSpecEditor(page);
 
     // Step 5: Wait for the spec editor to load
-    const specEditor = page.locator('[data-testid="spec-editor"]');
+    const specEditor = await getByTestId(page, "spec-editor");
     await specEditor.waitFor({ state: "visible", timeout: 10000 });
 
     // Step 6: Wait for CodeMirror to initialize (it has a .cm-content element)
@@ -205,7 +65,7 @@ test.describe("Spec Editor Persistence", () => {
 
     // Step 9: Refresh the page
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await waitForNetworkIdle(page);
 
     // Step 10: Navigate back to the spec editor
     // After reload, we need to wait for the app to initialize
@@ -269,16 +129,14 @@ test.describe("Spec Editor Persistence", () => {
 
     // Navigate to the app
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await waitForNetworkIdle(page);
 
     // Wait for the sidebar to be visible
-    const sidebar = page.locator('[data-testid="sidebar"]');
+    const sidebar = await getByTestId(page, "sidebar");
     await sidebar.waitFor({ state: "visible", timeout: 10000 });
 
     // Click the Open Project button
-    const openProjectButton = page.locator(
-      '[data-testid="open-project-button"]'
-    );
+    const openProjectButton = await getByTestId(page, "open-project-button");
 
     // Check if the button is visible (it might not be in collapsed sidebar)
     const isButtonVisible = await openProjectButton
@@ -286,7 +144,7 @@ test.describe("Spec Editor Persistence", () => {
       .catch(() => false);
 
     if (isButtonVisible) {
-      await openProjectButton.click();
+      await clickElement(page, "open-project-button");
 
       // The file browser dialog should open
       // Note: In web mode, this might use the FileBrowserDialog component
@@ -341,7 +199,7 @@ test.describe("Spec Editor - Full Open Project Flow", () => {
   }) => {
     // Navigate to app first
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await waitForNetworkIdle(page);
 
     // Set up localStorage state (without a current project, but mark setup complete)
     // Using evaluate instead of addInitScript so it only runs once
@@ -378,17 +236,15 @@ test.describe("Spec Editor - Full Open Project Flow", () => {
 
     // Reload to apply the localStorage state
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await waitForNetworkIdle(page);
 
     // Wait for sidebar
     await page.waitForSelector('[data-testid="sidebar"]', { timeout: 10000 });
 
     // Click the Open Project button
-    const openProjectButton = page.locator(
-      '[data-testid="open-project-button"]'
-    );
+    const openProjectButton = await getByTestId(page, "open-project-button");
     await openProjectButton.waitFor({ state: "visible", timeout: 10000 });
-    await openProjectButton.click();
+    await clickElement(page, "open-project-button");
 
     // Wait for the file browser dialog to open
     const dialogTitle = page.locator('text="Select Project Directory"');
@@ -401,15 +257,14 @@ test.describe("Spec Editor - Full Open Project Flow", () => {
     );
 
     // Use the path input to directly navigate to the fixture directory
-    const pathInput = page.locator('[data-testid="path-input"]');
+    const pathInput = await getByTestId(page, "path-input");
     await pathInput.waitFor({ state: "visible", timeout: 5000 });
 
     // Clear the input and type the full path to the fixture
-    await pathInput.fill(FIXTURE_PATH);
+    await fillInput(page, "path-input", getFixturePath());
 
     // Click the Go button to navigate to the path
-    const goButton = page.locator('[data-testid="go-to-path-button"]');
-    await goButton.click();
+    await clickElement(page, "go-to-path-button");
 
     // Wait for loading to complete
     await page.waitForFunction(
@@ -435,9 +290,9 @@ test.describe("Spec Editor - Full Open Project Flow", () => {
     await page.waitForTimeout(500);
 
     // Navigate to spec editor
-    const specNav = page.locator('[data-testid="nav-spec"]');
+    const specNav = await getByTestId(page, "nav-spec");
     await specNav.waitFor({ state: "visible", timeout: 10000 });
-    await specNav.click();
+    await clickElement(page, "nav-spec");
 
     // Wait for spec view with the editor (not the empty state)
     await page.waitForSelector('[data-testid="spec-view"]', { timeout: 10000 });
@@ -454,11 +309,11 @@ test.describe("Spec Editor - Full Open Project Flow", () => {
 
     // Refresh and verify persistence
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await waitForNetworkIdle(page);
 
     // Navigate back to spec editor
     await specNav.waitFor({ state: "visible", timeout: 10000 });
-    await specNav.click();
+    await clickElement(page, "nav-spec");
 
     await page.waitForSelector('[data-testid="spec-editor"] .cm-content', {
       timeout: 10000,
