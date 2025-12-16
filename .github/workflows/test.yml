@@ -32,10 +32,7 @@ jobs:
       - name: Install dependencies
         # Use npm install instead of npm ci to correctly resolve platform-specific
         # optional dependencies (e.g., @tailwindcss/oxide, lightningcss binaries)
-        # Increase Node memory limit to prevent OOM during install
-        run: npm install --prefer-offline
-        env:
-          NODE_OPTIONS: --max_old_space_size=6144
+        run: npm install
 
       - name: Install Linux native bindings
         # Workaround for npm optional dependencies bug (npm/cli#4828)
