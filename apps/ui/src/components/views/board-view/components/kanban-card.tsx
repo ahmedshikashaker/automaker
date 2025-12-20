@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo, memo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -150,7 +149,12 @@ export const KanbanCard = memo(function KanbanCard({
   const [agentInfo, setAgentInfo] = useState<AgentTaskInfo | null>(null);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
-  const { kanbanCardDetailLevel, enableDependencyBlocking, features, useWorktrees } = useAppStore();
+  const {
+    kanbanCardDetailLevel,
+    enableDependencyBlocking,
+    features,
+    useWorktrees,
+  } = useAppStore();
 
   // Calculate blocking dependencies (if feature is in backlog and has incomplete dependencies)
   const blockingDependencies = useMemo(() => {
@@ -287,9 +291,8 @@ export const KanbanCard = memo(function KanbanCard({
     (borderStyle as Record<string, string>).borderColor = "transparent";
   } else if (cardBorderOpacity !== 100) {
     (borderStyle as Record<string, string>).borderWidth = "1px";
-    (
-      borderStyle as Record<string, string>
-    ).borderColor = `color-mix(in oklch, var(--border) ${cardBorderOpacity}%, transparent)`;
+    (borderStyle as Record<string, string>).borderColor =
+      `color-mix(in oklch, var(--border) ${cardBorderOpacity}%, transparent)`;
   }
 
   const cardElement = (
@@ -336,168 +339,220 @@ export const KanbanCard = memo(function KanbanCard({
         />
       )}
 
-      {/* Priority badge */}
-      {feature.priority && (
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  "absolute px-2 py-1 h-8 text-sm font-bold rounded-md flex items-center justify-center z-10",
-                  "top-2 left-2 min-w-[36px]",
-                  feature.priority === 1 &&
-                    "bg-red-500/20 text-red-500 border-2 border-red-500/50",
-                  feature.priority === 2 &&
-                    "bg-yellow-500/20 text-yellow-500 border-2 border-yellow-500/50",
-                  feature.priority === 3 &&
-                    "bg-blue-500/20 text-blue-500 border-2 border-blue-500/50"
-                )}
-                data-testid={`priority-badge-${feature.id}`}
-              >
-                {feature.priority === 1 ? "H" : feature.priority === 2 ? "M" : "L"}
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="text-xs">
-              <p>
-                {feature.priority === 1
-                  ? "High Priority"
-                  : feature.priority === 2
-                  ? "Medium Priority"
-                  : "Low Priority"}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-
-      {/* Category text next to priority badge */}
-      {feature.priority && (
-        <div className="absolute top-2 left-[54px] right-12 z-10 flex items-center h-[32px]">
-          <span className="text-[11px] text-muted-foreground/70 font-medium truncate">
-            {feature.category}
-          </span>
-        </div>
-      )}
-
-      {/* Skip Tests (Manual) indicator badge - positioned at top right */}
-      {feature.skipTests && !feature.error && feature.status === "backlog" && (
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  "absolute px-2 py-1 h-8 text-sm font-bold rounded-md flex items-center justify-center z-10",
-                  "min-w-[36px]",
-                  "top-2 right-2",
-                  "bg-[var(--status-warning-bg)] border-2 border-[var(--status-warning)]/50 text-[var(--status-warning)]"
-                )}
-                data-testid={`skip-tests-badge-${feature.id}`}
-              >
-                <Hand className="w-4 h-4" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="text-xs">
-              <p>Manual verification required</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-
-      {/* Error indicator badge */}
-      {feature.error && (
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  "absolute px-2 py-1 text-[11px] font-medium rounded-md flex items-center justify-center z-10",
-                  "min-w-[36px]",
-                  feature.priority ? "top-11 left-2" : "top-2 left-2",
-                  "bg-[var(--status-error-bg)] border border-[var(--status-error)]/40 text-[var(--status-error)]"
-                )}
-                data-testid={`error-badge-${feature.id}`}
-              >
-                <AlertCircle className="w-3.5 h-3.5" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="text-xs max-w-[250px]">
-              <p>{feature.error}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-
-      {/* Blocked by dependencies badge - positioned at top right */}
-      {blockingDependencies.length > 0 && !feature.error && !feature.skipTests && feature.status === "backlog" && (
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  "absolute px-2 py-1 h-8 text-sm font-bold rounded-md flex items-center justify-center z-10",
-                  "min-w-[36px]",
-                  "top-2 right-2",
-                  "bg-orange-500/20 border-2 border-orange-500/50 text-orange-500"
-                )}
-                data-testid={`blocked-badge-${feature.id}`}
-              >
-                <Lock className="w-4 h-4" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="text-xs max-w-[250px]">
-              <p className="font-medium mb-1">Blocked by {blockingDependencies.length} incomplete {blockingDependencies.length === 1 ? 'dependency' : 'dependencies'}</p>
-              <p className="text-muted-foreground">
-                {blockingDependencies.map(depId => {
-                  const dep = features.find(f => f.id === depId);
-                  return dep?.description || depId;
-                }).join(', ')}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-
-      {/* Just Finished indicator badge */}
-      {isJustFinished && (
-        <div
-          className={cn(
-            "absolute px-1.5 py-0.5 text-[10px] font-medium rounded-md flex items-center gap-1 z-10",
-            feature.priority ? "top-11 left-2" : "top-2 left-2",
-            "bg-[var(--status-success-bg)] border border-[var(--status-success)]/40 text-[var(--status-success)]",
-            "animate-pulse"
+      {/* Compact Badge Row */}
+      {(feature.error ||
+        (blockingDependencies.length > 0 &&
+          !feature.error &&
+          !feature.skipTests &&
+          feature.status === "backlog") ||
+        isJustFinished) && (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pt-1.5 min-h-[24px]">
+          {/* Error badge */}
+          {feature.error && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                      "bg-[var(--status-error-bg)] border-[var(--status-error)]/40 text-[var(--status-error)]"
+                    )}
+                    data-testid={`error-badge-${feature.id}`}
+                  >
+                    <AlertCircle className="w-3 h-3" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs max-w-[250px]">
+                  <p>{feature.error}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
-          data-testid={`just-finished-badge-${feature.id}`}
-          title="Agent just finished working on this feature"
-        >
-          <Sparkles className="w-3 h-3" />
+
+          {/* Blocked badge */}
+          {blockingDependencies.length > 0 &&
+            !feature.error &&
+            !feature.skipTests &&
+            feature.status === "backlog" && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border-2 px-1.5 py-0.5 text-[10px] font-bold",
+                        "bg-orange-500/20 border-orange-500/50 text-orange-500"
+                      )}
+                      data-testid={`blocked-badge-${feature.id}`}
+                    >
+                      <Lock className="w-3 h-3" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    className="text-xs max-w-[250px]"
+                  >
+                    <p className="font-medium mb-1">
+                      Blocked by {blockingDependencies.length} incomplete{" "}
+                      {blockingDependencies.length === 1
+                        ? "dependency"
+                        : "dependencies"}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {blockingDependencies
+                        .map((depId) => {
+                          const dep = features.find((f) => f.id === depId);
+                          return dep?.description || depId;
+                        })
+                        .join(", ")}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+          {/* Just Finished badge */}
+          {isJustFinished && (
+            <div
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                "bg-[var(--status-success-bg)] border-[var(--status-success)]/40 text-[var(--status-success)]",
+                "animate-pulse"
+              )}
+              data-testid={`just-finished-badge-${feature.id}`}
+              title="Agent just finished working on this feature"
+            >
+              <Sparkles className="w-3 h-3" />
+            </div>
+          )}
         </div>
       )}
 
-      <CardHeader
-        className={cn(
-          "p-3 pb-2 block",
-          feature.priority && "pt-12",
-          !feature.priority &&
-            (feature.skipTests || feature.error || isJustFinished) &&
-            "pt-10"
-        )}
-      >
-        {isCurrentAutoTask && (
-          <div className="absolute top-2 right-2 flex items-center justify-center gap-2 bg-[var(--status-in-progress)]/15 border border-[var(--status-in-progress)]/50 rounded-md px-2 py-0.5">
-            <Loader2 className="w-3.5 h-3.5 text-[var(--status-in-progress)] animate-spin" />
-            <span className="text-[10px] text-[var(--status-in-progress)] font-medium">
-              {formatModelName(feature.model ?? DEFAULT_MODEL)}
-            </span>
-            {feature.startedAt && (
-              <CountUpTimer
-                startedAt={feature.startedAt}
-                className="text-[var(--status-in-progress)] text-[10px]"
-              />
+      {/* Category row */}
+      <div className="px-3 pt-4">
+        <span className="text-[11px] text-muted-foreground/70 font-medium">
+          {feature.category}
+        </span>
+      </div>
+
+      <CardHeader className="p-3 pb-2 block">
+        {/* Priority and Manual Verification badges - top left, aligned with delete button */}
+        {(feature.priority ||
+          (feature.skipTests &&
+            !feature.error &&
+            feature.status === "backlog")) && (
+          <div className="absolute top-2 left-2 flex items-center gap-1.5">
+            {/* Priority badge */}
+            {feature.priority && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={cn(
+                        "inline-flex items-center justify-center gap-1 rounded-full border-2 px-1.5 py-0.5 text-[10px] font-bold",
+                        feature.priority === 1 &&
+                          "bg-red-500/20 text-red-500 border-red-500/50",
+                        feature.priority === 2 &&
+                          "bg-yellow-500/20 text-yellow-500 border-yellow-500/50",
+                        feature.priority === 3 &&
+                          "bg-blue-500/20 text-blue-500 border-blue-500/50"
+                      )}
+                      data-testid={`priority-badge-${feature.id}`}
+                    >
+                      {feature.priority === 1
+                        ? "H"
+                        : feature.priority === 2
+                          ? "M"
+                          : "L"}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    <p>
+                      {feature.priority === 1
+                        ? "High Priority"
+                        : feature.priority === 2
+                          ? "Medium Priority"
+                          : "Low Priority"}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
+            {/* Manual verification badge */}
+            {feature.skipTests &&
+              !feature.error &&
+              feature.status === "backlog" && (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border-2 px-1.5 py-0.5 text-[10px] font-bold",
+                          "bg-[var(--status-warning-bg)] border-[var(--status-warning)]/50 text-[var(--status-warning)]"
+                        )}
+                        data-testid={`skip-tests-badge-${feature.id}`}
+                      >
+                        <Hand className="w-3 h-3" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      <p>Manual verification required</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+          </div>
+        )}
+        {isCurrentAutoTask && (
+          <div className="absolute top-2 right-2 flex items-center gap-1">
+            <div className="flex items-center justify-center gap-2 bg-[var(--status-in-progress)]/15 border border-[var(--status-in-progress)]/50 rounded-md px-2 py-0.5">
+              <Loader2 className="w-3.5 h-3.5 text-[var(--status-in-progress)] animate-spin" />
+              {feature.startedAt && (
+                <CountUpTimer
+                  startedAt={feature.startedAt}
+                  className="text-[var(--status-in-progress)] text-[10px]"
+                />
+              )}
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 hover:bg-muted/80 rounded-md"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  data-testid={`menu-running-${feature.id}`}
+                >
+                  <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                  data-testid={`edit-running-${feature.id}`}
+                  className="text-xs"
+                >
+                  <Edit className="w-3 h-3 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                {/* Model info in dropdown */}
+                <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-t mt-1 pt-1.5">
+                  <div className="flex items-center gap-1">
+                    <Cpu className="w-3 h-3" />
+                    <span>
+                      {formatModelName(feature.model ?? DEFAULT_MODEL)}
+                    </span>
+                  </div>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
         {!isCurrentAutoTask && feature.status === "backlog" && (
-          <div className="absolute bottom-1 right-2">
+          <div className="absolute top-2 right-2">
             <Button
               variant="ghost"
               size="sm"
@@ -528,7 +583,9 @@ export const KanbanCard = memo(function KanbanCard({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   data-testid={`edit-${
-                    feature.status === "waiting_approval" ? "waiting" : "verified"
+                    feature.status === "waiting_approval"
+                      ? "waiting"
+                      : "verified"
                   }-${feature.id}`}
                   title="Edit"
                 >
@@ -554,8 +611,6 @@ export const KanbanCard = memo(function KanbanCard({
                     <FileText className="w-4 h-4" />
                   </Button>
                 )}
-              </div>
-              <div className="absolute bottom-1 right-2">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -566,7 +621,9 @@ export const KanbanCard = memo(function KanbanCard({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   data-testid={`delete-${
-                    feature.status === "waiting_approval" ? "waiting" : "verified"
+                    feature.status === "waiting_approval"
+                      ? "waiting"
+                      : "verified"
                   }-${feature.id}`}
                   title="Delete"
                 >
@@ -577,7 +634,21 @@ export const KanbanCard = memo(function KanbanCard({
           )}
         {!isCurrentAutoTask && feature.status === "in_progress" && (
           <>
-            <div className="absolute top-2 right-2">
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 hover:bg-white/10 text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick(e);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                data-testid={`delete-feature-${feature.id}`}
+                title="Delete"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -616,24 +687,17 @@ export const KanbanCard = memo(function KanbanCard({
                       View Logs
                     </DropdownMenuItem>
                   )}
+                  {/* Model info in dropdown */}
+                  <div className="px-2 py-1.5 text-[10px] text-muted-foreground border-t mt-1 pt-1.5">
+                    <div className="flex items-center gap-1">
+                      <Cpu className="w-3 h-3" />
+                      <span>
+                        {formatModelName(feature.model ?? DEFAULT_MODEL)}
+                      </span>
+                    </div>
+                  </div>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
-            <div className="absolute bottom-1 right-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 hover:bg-white/10 text-muted-foreground hover:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteClick(e);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                data-testid={`delete-feature-${feature.id}`}
-                title="Delete"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
             </div>
           </>
         )}
@@ -650,7 +714,9 @@ export const KanbanCard = memo(function KanbanCard({
             {feature.titleGenerating ? (
               <div className="flex items-center gap-1.5 mb-1">
                 <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
-                <span className="text-xs text-muted-foreground italic">Generating title...</span>
+                <span className="text-xs text-muted-foreground italic">
+                  Generating title...
+                </span>
               </div>
             ) : feature.title ? (
               <CardTitle className="text-sm font-semibold text-foreground mb-1 line-clamp-2">
@@ -688,16 +754,11 @@ export const KanbanCard = memo(function KanbanCard({
                 )}
               </button>
             )}
-            {!feature.priority && (
-              <CardDescription className="text-[11px] mt-1.5 truncate text-muted-foreground/70">
-                {feature.category}
-              </CardDescription>
-            )}
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="p-3 pt-0">
+      <CardContent className="px-3 pt-0 pb-0">
         {/* Target Branch Display */}
         {useWorktrees && feature.branchName && (
           <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -710,8 +771,9 @@ export const KanbanCard = memo(function KanbanCard({
 
         {/* PR URL Display */}
         {typeof feature.prUrl === "string" &&
-          /^https?:\/\//i.test(feature.prUrl) && (() => {
-            const prNumber = feature.prUrl.split('/').pop();
+          /^https?:\/\//i.test(feature.prUrl) &&
+          (() => {
+            const prNumber = feature.prUrl.split("/").pop();
             return (
               <div className="mb-2">
                 <a
@@ -726,7 +788,7 @@ export const KanbanCard = memo(function KanbanCard({
                 >
                   <GitPullRequest className="w-3 h-3 shrink-0" />
                   <span className="truncate max-w-[150px]">
-                    {prNumber ? `Pull Request #${prNumber}` : 'Pull Request'}
+                    {prNumber ? `Pull Request #${prNumber}` : "Pull Request"}
                   </span>
                   <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                 </a>
@@ -917,11 +979,11 @@ export const KanbanCard = memo(function KanbanCard({
         )}
 
         {/* Actions */}
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 -mx-3 -mb-3 px-3 pb-3">
           {isCurrentAutoTask && (
             <>
               {/* Approve Plan button - PRIORITY: shows even when agent is "running" (paused for approval) */}
-              {feature.planSpec?.status === 'generated' && onApprovePlan && (
+              {feature.planSpec?.status === "generated" && onApprovePlan && (
                 <Button
                   variant="default"
                   size="sm"
@@ -981,7 +1043,7 @@ export const KanbanCard = memo(function KanbanCard({
           {!isCurrentAutoTask && feature.status === "in_progress" && (
             <>
               {/* Approve Plan button - shows when plan is generated and waiting for approval */}
-              {feature.planSpec?.status === 'generated' && onApprovePlan && (
+              {feature.planSpec?.status === "generated" && onApprovePlan && (
                 <Button
                   variant="default"
                   size="sm"
