@@ -4,8 +4,9 @@
  */
 
 import path from 'path';
-import type { Feature } from '@automaker/types';
+import type { Feature, PlanSpec, FeatureStatus } from '@automaker/types';
 import { createLogger } from '@automaker/utils';
+import { resolveDependencies, areDependenciesSatisfied } from '@automaker/dependency-resolver';
 import * as secureFs from '../lib/secure-fs.js';
 import {
   getFeaturesDir,
@@ -379,6 +380,117 @@ export class FeatureLoader {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
       }
+    }
+  }
+
+  /**
+   * Check if agent output exists for a feature
+   */
+  async hasAgentOutput(projectPath: string, featureId: string): Promise<boolean> {
+    try {
+      const agentOutputPath = this.getAgentOutputPath(projectPath, featureId);
+      await secureFs.access(agentOutputPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Update feature status with proper timestamp handling
+   * Used by auto-mode to update feature status during execution
+   */
+  async updateStatus(
+    projectPath: string,
+    featureId: string,
+    status: FeatureStatus
+  ): Promise<Feature | null> {
+    try {
+      const featureJsonPath = this.getFeatureJsonPath(projectPath, featureId);
+      const content = (await secureFs.readFile(featureJsonPath, 'utf-8')) as string;
+      const feature = JSON.parse(content) as Feature;
+
+      feature.status = status;
+      feature.updatedAt = new Date().toISOString();
+
+      // Handle justFinishedAt for waiting_approval status
+      if (status === 'waiting_approval') {
+        feature.justFinishedAt = new Date().toISOString();
+      } else {
+        feature.justFinishedAt = undefined;
+      }
+
+      await secureFs.writeFile(featureJsonPath, JSON.stringify(feature, null, 2));
+      return feature;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      logger.error(`[FeatureLoader] Failed to update status for ${featureId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Update feature plan specification
+   * Handles version incrementing and timestamp management
+   */
+  async updatePlanSpec(
+    projectPath: string,
+    featureId: string,
+    updates: Partial<PlanSpec>
+  ): Promise<Feature | null> {
+    try {
+      const featureJsonPath = this.getFeatureJsonPath(projectPath, featureId);
+      const content = (await secureFs.readFile(featureJsonPath, 'utf-8')) as string;
+      const feature = JSON.parse(content) as Feature;
+
+      // Initialize planSpec if not present
+      if (!feature.planSpec) {
+        feature.planSpec = { status: 'pending', version: 1, reviewedByUser: false };
+      }
+
+      // Increment version if content changed
+      if (updates.content && updates.content !== feature.planSpec.content) {
+        feature.planSpec.version = (feature.planSpec.version || 0) + 1;
+      }
+
+      // Merge updates
+      Object.assign(feature.planSpec, updates);
+      feature.updatedAt = new Date().toISOString();
+
+      await secureFs.writeFile(featureJsonPath, JSON.stringify(feature, null, 2));
+      return feature;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      logger.error(`[FeatureLoader] Failed to update planSpec for ${featureId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get features that are pending and ready to execute
+   * Filters by status and resolves dependencies
+   */
+  async getPending(projectPath: string): Promise<Feature[]> {
+    try {
+      const allFeatures = await this.getAll(projectPath);
+      const pendingFeatures = allFeatures.filter((f) =>
+        ['pending', 'ready', 'backlog'].includes(f.status)
+      );
+
+      // Resolve dependencies and order features
+      const { orderedFeatures } = resolveDependencies(pendingFeatures);
+
+      // Filter to features whose dependencies are satisfied
+      return orderedFeatures.filter((feature: Feature) =>
+        areDependenciesSatisfied(feature, allFeatures)
+      );
+    } catch (error) {
+      logger.error('[FeatureLoader] Failed to get pending features:', error);
+      return [];
     }
   }
 }

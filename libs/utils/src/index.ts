@@ -54,3 +54,15 @@ export {
   type ContextFilesResult,
   type LoadContextFilesOptions,
 } from './context-loader.js';
+
+// Stream processing
+export {
+  processStream,
+  collectStreamText,
+  processStreamWithProgress,
+  hasMarker,
+  extractBeforeMarker,
+  sleep,
+  type StreamHandlers,
+  type StreamResult,
+} from './stream-processor.js';

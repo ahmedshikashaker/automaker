@@ -17,3 +17,12 @@ export {
   generateDiffsForNonGitDirectory,
   getGitRepositoryDiffs,
 } from './diff.js';
+
+// Export commit utilities
+export {
+  hasUncommittedChanges,
+  commitAll,
+  getHeadHash,
+  shortHash,
+  runVerificationChecks,
+} from './commit.js';

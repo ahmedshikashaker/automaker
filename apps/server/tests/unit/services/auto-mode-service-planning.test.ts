@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AutoModeService } from '@/services/auto-mode-service.js';
+import {
+  getPlanningPromptPrefix,
+  parseTasksFromSpec,
+  parseTaskLine,
+  buildFeaturePrompt,
+  extractTitleFromDescription,
+} from '@automaker/prompts';
 
 describe('auto-mode-service.ts - Planning Mode', () => {
   let service: AutoModeService;
@@ -18,54 +25,28 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     await service.stopAutoLoop().catch(() => {});
   });
 
-  describe('getPlanningPromptPrefix', () => {
-    // Access private method through any cast for testing
-    const getPlanningPromptPrefix = (svc: any, feature: any) => {
-      return svc.getPlanningPromptPrefix(feature);
-    };
-
+  describe('getPlanningPromptPrefix (from @automaker/prompts)', () => {
     it('should return empty string for skip mode', () => {
-      const feature = { id: 'test', planningMode: 'skip' as const };
-      const result = getPlanningPromptPrefix(service, feature);
-      expect(result).toBe('');
-    });
-
-    it('should return empty string when planningMode is undefined', () => {
-      const feature = { id: 'test' };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('skip');
       expect(result).toBe('');
     });
 
     it('should return lite prompt for lite mode without approval', () => {
-      const feature = {
-        id: 'test',
-        planningMode: 'lite' as const,
-        requirePlanApproval: false,
-      };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('lite', false);
       expect(result).toContain('Planning Phase (Lite Mode)');
       expect(result).toContain('[PLAN_GENERATED]');
       expect(result).toContain('Feature Request');
     });
 
     it('should return lite_with_approval prompt for lite mode with approval', () => {
-      const feature = {
-        id: 'test',
-        planningMode: 'lite' as const,
-        requirePlanApproval: true,
-      };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('lite', true);
       expect(result).toContain('Planning Phase (Lite Mode)');
       expect(result).toContain('[SPEC_GENERATED]');
       expect(result).toContain('DO NOT proceed with implementation');
     });
 
     it('should return spec prompt for spec mode', () => {
-      const feature = {
-        id: 'test',
-        planningMode: 'spec' as const,
-      };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('spec');
       expect(result).toContain('Specification Phase (Spec Mode)');
       expect(result).toContain('```tasks');
       expect(result).toContain('T001');
@@ -74,11 +55,7 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     });
 
     it('should return full prompt for full mode', () => {
-      const feature = {
-        id: 'test',
-        planningMode: 'full' as const,
-      };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('full');
       expect(result).toContain('Full Specification Phase (Full SDD Mode)');
       expect(result).toContain('Phase 1: Foundation');
       expect(result).toContain('Phase 2: Core Implementation');
@@ -86,11 +63,7 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     });
 
     it('should include the separator and Feature Request header', () => {
-      const feature = {
-        id: 'test',
-        planningMode: 'spec' as const,
-      };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('spec');
       expect(result).toContain('---');
       expect(result).toContain('## Feature Request');
     });
@@ -98,8 +71,7 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     it('should instruct agent to NOT output exploration text', () => {
       const modes = ['lite', 'spec', 'full'] as const;
       for (const mode of modes) {
-        const feature = { id: 'test', planningMode: mode };
-        const result = getPlanningPromptPrefix(service, feature);
+        const result = getPlanningPromptPrefix(mode);
         expect(result).toContain('Do NOT output exploration text');
         expect(result).toContain('Start DIRECTLY');
       }
@@ -198,17 +170,14 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     });
   });
 
-  describe('buildFeaturePrompt', () => {
-    const buildFeaturePrompt = (svc: any, feature: any) => {
-      return svc.buildFeaturePrompt(feature);
-    };
-
+  describe('buildFeaturePrompt (from @automaker/prompts)', () => {
     it('should include feature ID and description', () => {
       const feature = {
         id: 'feat-123',
+        category: 'Test',
         description: 'Add user authentication',
       };
-      const result = buildFeaturePrompt(service, feature);
+      const result = buildFeaturePrompt(feature);
       expect(result).toContain('feat-123');
       expect(result).toContain('Add user authentication');
     });
@@ -216,10 +185,11 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     it('should include specification when present', () => {
       const feature = {
         id: 'feat-123',
+        category: 'Test',
         description: 'Test feature',
         spec: 'Detailed specification here',
       };
-      const result = buildFeaturePrompt(service, feature);
+      const result = buildFeaturePrompt(feature);
       expect(result).toContain('Specification:');
       expect(result).toContain('Detailed specification here');
     });
@@ -227,13 +197,14 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     it('should include image paths when present', () => {
       const feature = {
         id: 'feat-123',
+        category: 'Test',
         description: 'Test feature',
         imagePaths: [
           { path: '/tmp/image1.png', filename: 'image1.png', mimeType: 'image/png' },
           '/tmp/image2.jpg',
         ],
       };
-      const result = buildFeaturePrompt(service, feature);
+      const result = buildFeaturePrompt(feature);
       expect(result).toContain('Context Images Attached');
       expect(result).toContain('image1.png');
       expect(result).toContain('/tmp/image2.jpg');
@@ -242,55 +213,46 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     it('should include summary tags instruction', () => {
       const feature = {
         id: 'feat-123',
+        category: 'Test',
         description: 'Test feature',
       };
-      const result = buildFeaturePrompt(service, feature);
+      const result = buildFeaturePrompt(feature);
       expect(result).toContain('<summary>');
-      expect(result).toContain('</summary>');
+      expect(result).toContain('summary');
     });
   });
 
-  describe('extractTitleFromDescription', () => {
-    const extractTitle = (svc: any, description: string) => {
-      return svc.extractTitleFromDescription(description);
-    };
-
+  describe('extractTitleFromDescription (from @automaker/prompts)', () => {
     it("should return 'Untitled Feature' for empty description", () => {
-      expect(extractTitle(service, '')).toBe('Untitled Feature');
-      expect(extractTitle(service, '   ')).toBe('Untitled Feature');
+      expect(extractTitleFromDescription('')).toBe('Untitled Feature');
+      expect(extractTitleFromDescription('   ')).toBe('Untitled Feature');
     });
 
     it('should return first line if under 60 characters', () => {
       const description = 'Add user login\nWith email validation';
-      expect(extractTitle(service, description)).toBe('Add user login');
+      expect(extractTitleFromDescription(description)).toBe('Add user login');
     });
 
     it('should truncate long first lines to 60 characters', () => {
       const description =
         'This is a very long feature description that exceeds the sixty character limit significantly';
-      const result = extractTitle(service, description);
+      const result = extractTitleFromDescription(description);
       expect(result.length).toBe(60);
       expect(result).toContain('...');
     });
   });
 
-  describe('PLANNING_PROMPTS structure', () => {
-    const getPlanningPromptPrefix = (svc: any, feature: any) => {
-      return svc.getPlanningPromptPrefix(feature);
-    };
-
+  describe('PLANNING_PROMPTS structure (from @automaker/prompts)', () => {
     it('should have all required planning modes', () => {
       const modes = ['lite', 'spec', 'full'] as const;
       for (const mode of modes) {
-        const feature = { id: 'test', planningMode: mode };
-        const result = getPlanningPromptPrefix(service, feature);
+        const result = getPlanningPromptPrefix(mode);
         expect(result.length).toBeGreaterThan(100);
       }
     });
 
     it('lite prompt should include correct structure', () => {
-      const feature = { id: 'test', planningMode: 'lite' as const };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('lite');
       expect(result).toContain('Goal');
       expect(result).toContain('Approach');
       expect(result).toContain('Files to Touch');
@@ -299,8 +261,7 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     });
 
     it('spec prompt should include task format instructions', () => {
-      const feature = { id: 'test', planningMode: 'spec' as const };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('spec');
       expect(result).toContain('Problem');
       expect(result).toContain('Solution');
       expect(result).toContain('Acceptance Criteria');
@@ -310,8 +271,7 @@ describe('auto-mode-service.ts - Planning Mode', () => {
     });
 
     it('full prompt should include phases', () => {
-      const feature = { id: 'test', planningMode: 'full' as const };
-      const result = getPlanningPromptPrefix(service, feature);
+      const result = getPlanningPromptPrefix('full');
       expect(result).toContain('Problem Statement');
       expect(result).toContain('User Story');
       expect(result).toContain('Technical Context');

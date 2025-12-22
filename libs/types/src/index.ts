@@ -81,3 +81,15 @@ export {
   THINKING_LEVEL_LABELS,
   getModelDisplayName,
 } from './model-display.js';
+
+// Planning types (spec-driven development)
+export type {
+  TaskStatus,
+  PlanSpecStatus,
+  ParsedTask,
+  PlanSpec,
+  AutoModeEventType,
+  AutoModeEventPayload,
+  TaskProgressPayload,
+  PlanApprovalPayload,
+} from './planning.js';

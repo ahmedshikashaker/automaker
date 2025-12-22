@@ -16,12 +16,10 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import type { PlanSpec } from '@/store/app-store';
-
-export type PlanningMode = 'skip' | 'lite' | 'spec' | 'full';
+import type { PlanningMode, PlanSpec, ParsedTask } from '@automaker/types';
 
 // Re-export for backwards compatibility
-export type { ParsedTask, PlanSpec } from '@/store/app-store';
+export type { PlanningMode, ParsedTask, PlanSpec };
 
 interface PlanningModeSelectorProps {
   mode: PlanningMode;

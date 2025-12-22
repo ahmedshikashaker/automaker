@@ -3,6 +3,7 @@
  */
 
 import type { PlanningMode } from './settings.js';
+import type { PlanSpec } from './planning.js';
 
 export interface FeatureImagePath {
   id: string;
@@ -41,20 +42,21 @@ export interface Feature {
   thinkingLevel?: string;
   planningMode?: PlanningMode;
   requirePlanApproval?: boolean;
-  planSpec?: {
-    status: 'pending' | 'generating' | 'generated' | 'approved' | 'rejected';
-    content?: string;
-    version: number;
-    generatedAt?: string;
-    approvedAt?: string;
-    reviewedByUser: boolean;
-    tasksCompleted?: number;
-    tasksTotal?: number;
-  };
+  /** Specification state for spec-driven development modes */
+  planSpec?: PlanSpec;
   error?: string;
   summary?: string;
   startedAt?: string;
   [key: string]: unknown; // Keep catch-all for extensibility
 }
 
-export type FeatureStatus = 'pending' | 'running' | 'completed' | 'failed' | 'verified';
+export type FeatureStatus =
+  | 'pending'
+  | 'ready'
+  | 'backlog'
+  | 'in_progress'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'verified'
+  | 'waiting_approval';

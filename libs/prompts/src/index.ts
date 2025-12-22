@@ -21,5 +21,31 @@ export {
   getAvailableEnhancementModes,
 } from './enhancement.js';
 
+// Planning prompts (spec-driven development)
+export {
+  PLANNING_PROMPTS,
+  getPlanningPrompt,
+  getPlanningPromptPrefix,
+  parseTasksFromSpec,
+  parseTaskLine,
+  buildTaskPrompt,
+  isSpecGeneratingMode,
+  canRequireApproval,
+  getPlanningModeDisplayName,
+} from './planning.js';
+
+// Feature prompts (implementation)
+export {
+  buildFeaturePrompt,
+  buildFollowUpPrompt,
+  buildContinuationPrompt,
+  extractTitleFromDescription,
+} from './feature-prompt.js';
+
 // Re-export types from @automaker/types
-export type { EnhancementMode, EnhancementExample } from '@automaker/types';
+export type {
+  EnhancementMode,
+  EnhancementExample,
+  PlanningMode,
+  ParsedTask,
+} from '@automaker/types';
