@@ -1,12 +1,15 @@
 /**
  * POST /verify-claude-auth endpoint - Verify Claude authentication by running a test query
- * Supports verifying either CLI auth or API key auth independently
+ * Supports verifying CLI auth, API key auth, or settings file auth independently
  */
 
 import type { Request, Response } from 'express';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { createLogger } from '@automaker/utils';
 import { getApiKey } from '../common.js';
+import os from 'os';
+import path from 'path';
+import fs from 'fs/promises';
 
 const logger = createLogger('Setup');
 
@@ -68,11 +71,37 @@ function containsAuthError(text: string): boolean {
   return AUTH_ERROR_PATTERNS.some((pattern) => lowerText.includes(pattern.toLowerCase()));
 }
 
+/**
+ * Read ANTHROPIC_AUTH_TOKEN from ~/.claude/settings.json
+ * Returns the token if found, null otherwise
+ */
+async function getSettingsFileToken(): Promise<string | null> {
+  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  try {
+    const content = await fs.readFile(settingsPath, 'utf-8');
+    const settings = JSON.parse(content);
+
+    // Check if settings has env with ANTHROPIC_AUTH_TOKEN
+    if (settings.env?.ANTHROPIC_AUTH_TOKEN) {
+      return settings.env.ANTHROPIC_AUTH_TOKEN;
+    }
+
+    // Also check for api_key in settings
+    if (settings.apiKey || settings.api_key) {
+      return settings.apiKey || settings.api_key;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function createVerifyClaudeAuthHandler() {
   return async (req: Request, res: Response): Promise<void> => {
     try {
       // Get the auth method from the request body
-      const { authMethod } = req.body as { authMethod?: 'cli' | 'api_key' };
+      const { authMethod } = req.body as { authMethod?: 'cli' | 'api_key' | 'settings_file' };
 
       logger.info(`[Setup] Verifying Claude authentication using method: ${authMethod || 'auto'}`);
 
@@ -110,6 +139,21 @@ export function createVerifyClaudeAuthHandler() {
               return;
             }
           }
+        } else if (authMethod === 'settings_file') {
+          // For settings_file verification, read the token from ~/.claude/settings.json
+          const settingsToken = await getSettingsFileToken();
+          if (settingsToken) {
+            process.env.ANTHROPIC_API_KEY = settingsToken;
+            logger.info('[Setup] Using token from ~/.claude/settings.json for verification');
+          } else {
+            res.json({
+              success: true,
+              authenticated: false,
+              error:
+                'No authentication token found in ~/.claude/settings.json. Please ensure the file exists and contains ANTHROPIC_AUTH_TOKEN in the env section.',
+            });
+            return;
+          }
         }
 
         // Run a minimal query to verify authentication
@@ -146,6 +190,9 @@ export function createVerifyClaudeAuthHandler() {
             if (authMethod === 'cli') {
               errorMessage =
                 "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.";
+            } else if (authMethod === 'settings_file') {
+              errorMessage =
+                'Authentication from ~/.claude/settings.json failed. Please check that ANTHROPIC_AUTH_TOKEN is valid.';
             } else {
               errorMessage = 'API key is invalid or has been revoked.';
             }
@@ -165,6 +212,9 @@ export function createVerifyClaudeAuthHandler() {
                     if (authMethod === 'cli') {
                       errorMessage =
                         "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.";
+                    } else if (authMethod === 'settings_file') {
+                      errorMessage =
+                        'Authentication from ~/.claude/settings.json failed. Please check that ANTHROPIC_AUTH_TOKEN is valid.';
                     } else {
                       errorMessage = 'API key is invalid or has been revoked.';
                     }
@@ -203,6 +253,9 @@ export function createVerifyClaudeAuthHandler() {
               if (authMethod === 'cli') {
                 errorMessage =
                   "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.";
+              } else if (authMethod === 'settings_file') {
+                errorMessage =
+                  'Authentication from ~/.claude/settings.json failed. Please check that ANTHROPIC_AUTH_TOKEN is valid.';
               } else {
                 errorMessage = 'API key is invalid or has been revoked.';
               }
@@ -251,6 +304,9 @@ export function createVerifyClaudeAuthHandler() {
           if (authMethod === 'cli') {
             errorMessage =
               "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.";
+          } else if (authMethod === 'settings_file') {
+            errorMessage =
+              'Authentication from ~/.claude/settings.json failed. Please check that ANTHROPIC_AUTH_TOKEN is valid.';
           } else {
             errorMessage = 'API key is invalid or has been revoked.';
           }

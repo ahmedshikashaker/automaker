@@ -11,6 +11,32 @@ import { getApiKey } from './common.js';
 
 const execAsync = promisify(exec);
 
+/**
+ * Check if ~/.claude/settings.json exists and has auth
+ * This is used by the Claude Agent SDK directly
+ */
+async function checkSettingsFileAuth(): Promise<boolean> {
+  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  try {
+    const content = await fs.readFile(settingsPath, 'utf-8');
+    const settings = JSON.parse(content);
+
+    // Check if settings has env with ANTHROPIC_AUTH_TOKEN
+    if (settings.env?.ANTHROPIC_AUTH_TOKEN) {
+      return true;
+    }
+
+    // Also check for api_key in settings
+    if (settings.apiKey || settings.api_key) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export async function getClaudeStatus() {
   let installed = false;
   let version = '';
@@ -90,12 +116,20 @@ export async function getClaudeStatus() {
     hasStoredOAuthToken: !!getApiKey('anthropic_oauth_token'),
     hasStoredApiKey: !!getApiKey('anthropic'),
     hasEnvApiKey: !!process.env.ANTHROPIC_API_KEY,
+    hasSettingsFileAuth: false, // NEW: Check for ~/.claude/settings.json with auth
     // Additional fields for detailed status
     oauthTokenValid: false,
     apiKeyValid: false,
     hasCliAuth: false,
     hasRecentActivity: false,
   };
+
+  // Check for ~/.claude/settings.json with auth token (NEW - highest priority for SDK usage)
+  auth.hasSettingsFileAuth = await checkSettingsFileAuth();
+  if (auth.hasSettingsFileAuth && !auth.authenticated) {
+    auth.authenticated = true;
+    auth.method = 'settings_file';
+  }
 
   const claudeDir = path.join(os.homedir(), '.claude');
 

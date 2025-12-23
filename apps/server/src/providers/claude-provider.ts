@@ -3,6 +3,11 @@
  *
  * Wraps the @anthropic-ai/claude-agent-sdk for seamless integration
  * with the provider architecture.
+ *
+ * Supports authentication via:
+ * 1. ~/.claude/settings.json - Loads env variables from settings file
+ * 2. Claude CLI (via claude login) - uses OAuth tokens from ~/.claude/
+ * 3. Anthropic API Key - via ANTHROPIC_API_KEY env var or in-memory storage
  */
 
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
@@ -13,6 +18,74 @@ import type {
   InstallationStatus,
   ModelDefinition,
 } from './types.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
+
+/**
+ * Load Claude settings from ~/.claude/settings.json
+ * Returns the env section if it exists
+ */
+async function loadClaudeSettings(): Promise<Record<string, string> | null> {
+  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  try {
+    const content = await fs.readFile(settingsPath, 'utf-8');
+    const settings = JSON.parse(content);
+    return settings.env || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if ~/.claude/settings.json exists and has auth token
+ */
+async function hasClaudeSettingsWithAuth(): Promise<boolean> {
+  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  try {
+    const content = await fs.readFile(settingsPath, 'utf-8');
+    const settings = JSON.parse(content);
+
+    // Check if settings has env with ANTHROPIC_AUTH_TOKEN
+    if (settings.env?.ANTHROPIC_AUTH_TOKEN) {
+      return true;
+    }
+
+    // Also check for api_key in settings
+    if (settings.apiKey || settings.api_key) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Helper to get Anthropic API key from multiple sources.
+ * Checks in-memory storage first (from UI setup), then env var.
+ */
+function getAnthropicApiKey(): string | undefined {
+  // Try environment variable first
+  if (process.env.ANTHROPIC_API_KEY) {
+    return process.env.ANTHROPIC_API_KEY;
+  }
+
+  // Try dynamic import of in-memory storage
+  try {
+    // Dynamic import to avoid circular dependency
+    const setupCommon = require('../routes/setup/common.js');
+    const apiKey = setupCommon.getApiKey?.('anthropic');
+    if (apiKey) {
+      return apiKey;
+    }
+  } catch {
+    // Setup routes not available
+  }
+
+  return undefined;
+}
 
 export class ClaudeProvider extends BaseProvider {
   getName(): string {
@@ -21,6 +94,9 @@ export class ClaudeProvider extends BaseProvider {
 
   /**
    * Execute a query using Claude Agent SDK
+   *
+   * Loads environment variables from ~/.claude/settings.json if available.
+   * This allows the SDK to use ANTHROPIC_AUTH_TOKEN and other settings.
    */
   async *executeQuery(options: ExecuteOptions): AsyncGenerator<ProviderMessage> {
     const {
@@ -34,6 +110,36 @@ export class ClaudeProvider extends BaseProvider {
       conversationHistory,
       sdkSessionId,
     } = options;
+
+    // Track original environment to restore later
+    const originalEnv: Record<string, string | undefined> = {};
+    const envKeysToRestore: string[] = [];
+
+    // Load settings from ~/.claude/settings.json
+    const settingsEnv = await loadClaudeSettings();
+
+    // Set environment variables from settings file if available
+    if (settingsEnv) {
+      for (const [key, value] of Object.entries(settingsEnv)) {
+        // Save original value if it exists
+        if (key in process.env) {
+          originalEnv[key] = process.env[key];
+          envKeysToRestore.push(key);
+        }
+        // Set the environment variable
+        process.env[key] = value;
+      }
+    }
+
+    // If no settings file and no API key env var, try in-memory storage
+    const hasEnvApiKey = !!process.env.ANTHROPIC_API_KEY;
+    if (!hasEnvApiKey && !settingsEnv) {
+      const inMemoryApiKey = getAnthropicApiKey();
+      if (inMemoryApiKey) {
+        process.env.ANTHROPIC_API_KEY = inMemoryApiKey;
+        envKeysToRestore.push('ANTHROPIC_API_KEY');
+      }
+    }
 
     // Build Claude SDK options
     const defaultTools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'];
@@ -90,6 +196,15 @@ export class ClaudeProvider extends BaseProvider {
     } catch (error) {
       console.error('[ClaudeProvider] executeQuery() error during execution:', error);
       throw error;
+    } finally {
+      // Restore original environment
+      for (const key of envKeysToRestore) {
+        if (originalEnv[key] !== undefined) {
+          process.env[key] = originalEnv[key];
+        } else {
+          delete process.env[key];
+        }
+      }
     }
   }
 
@@ -98,13 +213,20 @@ export class ClaudeProvider extends BaseProvider {
    */
   async detectInstallation(): Promise<InstallationStatus> {
     // Claude SDK is always available since it's a dependency
-    const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+    // Check for authentication from multiple sources
+    const hasApiKey = !!getAnthropicApiKey();
+    const hasSettingsAuth = await hasClaudeSettingsWithAuth();
+
+    // Authenticated if we have either API key or settings file with auth
+    const authenticated = hasApiKey || hasSettingsAuth;
 
     const status: InstallationStatus = {
       installed: true,
       method: 'sdk',
       hasApiKey,
-      authenticated: hasApiKey,
+      authenticated,
+      // Additional info about auth method
+      authMethod: hasSettingsAuth ? 'settings_file' : hasApiKey ? 'api_key' : 'none',
     };
 
     return status;
