@@ -10,6 +10,8 @@ import {
   Trash2,
   Sparkles,
   Workflow,
+  Plug,
+  MessageSquareText,
 } from 'lucide-react';
 import type { SettingsViewId } from '../hooks/use-settings-view';
 
@@ -23,6 +25,8 @@ export interface NavigationItem {
 export const NAV_ITEMS: NavigationItem[] = [
   { id: 'api-keys', label: 'API Keys', icon: Key },
   { id: 'providers', label: 'AI Providers', icon: Bot },
+  { id: 'mcp-servers', label: 'MCP Servers', icon: Plug },
+  { id: 'prompts', label: 'Prompt Customization', icon: MessageSquareText },
   { id: 'ai-enhancement', label: 'AI Enhancement', icon: Sparkles },
   { id: 'phase-models', label: 'Phase Models', icon: Workflow },
   { id: 'appearance', label: 'Appearance', icon: Palette },

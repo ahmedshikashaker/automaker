@@ -201,6 +201,7 @@ export const useSetupStore = create<SetupState & SetupActions>()(
         isFirstRun: state.isFirstRun,
         setupComplete: state.setupComplete,
         skipClaudeSetup: state.skipClaudeSetup,
+        claudeAuthStatus: state.claudeAuthStatus,
       }),
     }
   )

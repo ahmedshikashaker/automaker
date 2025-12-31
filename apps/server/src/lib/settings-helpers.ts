@@ -4,6 +4,16 @@
 
 import type { SettingsService } from '../services/settings-service.js';
 import type { ContextFilesResult, ContextFileInfo } from '@automaker/utils';
+import { createLogger } from '@automaker/utils';
+import type { MCPServerConfig, McpServerConfig, PromptCustomization } from '@automaker/types';
+import {
+  mergeAutoModePrompts,
+  mergeAgentPrompts,
+  mergeBacklogPlanPrompts,
+  mergeEnhancementPrompts,
+} from '@automaker/prompts';
+
+const logger = createLogger('SettingsHelper');
 
 /**
  * Get the autoLoadClaudeMd setting, with project settings taking precedence over global.
@@ -20,7 +30,7 @@ export async function getAutoLoadClaudeMdSetting(
   logPrefix = '[SettingsHelper]'
 ): Promise<boolean> {
   if (!settingsService) {
-    console.log(`${logPrefix} SettingsService not available, autoLoadClaudeMd disabled`);
+    logger.info(`${logPrefix} SettingsService not available, autoLoadClaudeMd disabled`);
     return false;
   }
 
@@ -28,7 +38,7 @@ export async function getAutoLoadClaudeMdSetting(
     // Check project settings first (takes precedence)
     const projectSettings = await settingsService.getProjectSettings(projectPath);
     if (projectSettings.autoLoadClaudeMd !== undefined) {
-      console.log(
+      logger.info(
         `${logPrefix} autoLoadClaudeMd from project settings: ${projectSettings.autoLoadClaudeMd}`
       );
       return projectSettings.autoLoadClaudeMd;
@@ -37,10 +47,38 @@ export async function getAutoLoadClaudeMdSetting(
     // Fall back to global settings
     const globalSettings = await settingsService.getGlobalSettings();
     const result = globalSettings.autoLoadClaudeMd ?? false;
-    console.log(`${logPrefix} autoLoadClaudeMd from global settings: ${result}`);
+    logger.info(`${logPrefix} autoLoadClaudeMd from global settings: ${result}`);
     return result;
   } catch (error) {
-    console.error(`${logPrefix} Failed to load autoLoadClaudeMd setting:`, error);
+    logger.error(`${logPrefix} Failed to load autoLoadClaudeMd setting:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get the enableSandboxMode setting from global settings.
+ * Returns false if settings service is not available.
+ *
+ * @param settingsService - Optional settings service instance
+ * @param logPrefix - Prefix for log messages (e.g., '[AgentService]')
+ * @returns Promise resolving to the enableSandboxMode setting value
+ */
+export async function getEnableSandboxModeSetting(
+  settingsService?: SettingsService | null,
+  logPrefix = '[SettingsHelper]'
+): Promise<boolean> {
+  if (!settingsService) {
+    logger.info(`${logPrefix} SettingsService not available, sandbox mode disabled`);
+    return false;
+  }
+
+  try {
+    const globalSettings = await settingsService.getGlobalSettings();
+    const result = globalSettings.enableSandboxMode ?? true;
+    logger.info(`${logPrefix} enableSandboxMode from global settings: ${result}`);
+    return result;
+  } catch (error) {
+    logger.error(`${logPrefix} Failed to load enableSandboxMode setting:`, error);
     throw error;
   }
 }
@@ -107,4 +145,162 @@ function formatContextFileEntry(file: ContextFileInfo): string {
   const pathInfo = `**Path:** \`${file.path}\``;
   const descriptionInfo = file.description ? `\n**Purpose:** ${file.description}` : '';
   return `${header}\n${pathInfo}${descriptionInfo}\n\n${file.content}`;
+}
+
+/**
+ * Get enabled MCP servers from global settings, converted to SDK format.
+ * Returns an empty object if settings service is not available or no servers are configured.
+ *
+ * @param settingsService - Optional settings service instance
+ * @param logPrefix - Prefix for log messages (e.g., '[AgentService]')
+ * @returns Promise resolving to MCP servers in SDK format (keyed by name)
+ */
+export async function getMCPServersFromSettings(
+  settingsService?: SettingsService | null,
+  logPrefix = '[SettingsHelper]'
+): Promise<Record<string, McpServerConfig>> {
+  if (!settingsService) {
+    return {};
+  }
+
+  try {
+    const globalSettings = await settingsService.getGlobalSettings();
+    const mcpServers = globalSettings.mcpServers || [];
+
+    // Filter to only enabled servers and convert to SDK format
+    const enabledServers = mcpServers.filter((s) => s.enabled !== false);
+
+    if (enabledServers.length === 0) {
+      return {};
+    }
+
+    // Convert settings format to SDK format (keyed by name)
+    const sdkServers: Record<string, McpServerConfig> = {};
+    for (const server of enabledServers) {
+      sdkServers[server.name] = convertToSdkFormat(server);
+    }
+
+    logger.info(
+      `${logPrefix} Loaded ${enabledServers.length} MCP server(s): ${enabledServers.map((s) => s.name).join(', ')}`
+    );
+
+    return sdkServers;
+  } catch (error) {
+    logger.error(`${logPrefix} Failed to load MCP servers setting:`, error);
+    return {};
+  }
+}
+
+/**
+ * Get MCP permission settings from global settings.
+ *
+ * @param settingsService - Optional settings service instance
+ * @param logPrefix - Prefix for log messages (e.g., '[AgentService]')
+ * @returns Promise resolving to MCP permission settings
+ */
+export async function getMCPPermissionSettings(
+  settingsService?: SettingsService | null,
+  logPrefix = '[SettingsHelper]'
+): Promise<{ mcpAutoApproveTools: boolean; mcpUnrestrictedTools: boolean }> {
+  // Default to true for autonomous workflow. Security is enforced when adding servers
+  // via the security warning dialog that explains the risks.
+  const defaults = { mcpAutoApproveTools: true, mcpUnrestrictedTools: true };
+
+  if (!settingsService) {
+    return defaults;
+  }
+
+  try {
+    const globalSettings = await settingsService.getGlobalSettings();
+    const result = {
+      mcpAutoApproveTools: globalSettings.mcpAutoApproveTools ?? true,
+      mcpUnrestrictedTools: globalSettings.mcpUnrestrictedTools ?? true,
+    };
+    logger.info(
+      `${logPrefix} MCP permission settings: autoApprove=${result.mcpAutoApproveTools}, unrestricted=${result.mcpUnrestrictedTools}`
+    );
+    return result;
+  } catch (error) {
+    logger.error(`${logPrefix} Failed to load MCP permission settings:`, error);
+    return defaults;
+  }
+}
+
+/**
+ * Convert a settings MCPServerConfig to SDK McpServerConfig format.
+ * Validates required fields and throws informative errors if missing.
+ */
+function convertToSdkFormat(server: MCPServerConfig): McpServerConfig {
+  if (server.type === 'sse') {
+    if (!server.url) {
+      throw new Error(`SSE MCP server "${server.name}" is missing a URL.`);
+    }
+    return {
+      type: 'sse',
+      url: server.url,
+      headers: server.headers,
+    };
+  }
+
+  if (server.type === 'http') {
+    if (!server.url) {
+      throw new Error(`HTTP MCP server "${server.name}" is missing a URL.`);
+    }
+    return {
+      type: 'http',
+      url: server.url,
+      headers: server.headers,
+    };
+  }
+
+  // Default to stdio
+  if (!server.command) {
+    throw new Error(`Stdio MCP server "${server.name}" is missing a command.`);
+  }
+  return {
+    type: 'stdio',
+    command: server.command,
+    args: server.args,
+    env: server.env,
+  };
+}
+
+/**
+ * Get prompt customization from global settings and merge with defaults.
+ * Returns prompts merged with built-in defaults - custom prompts override defaults.
+ *
+ * @param settingsService - Optional settings service instance
+ * @param logPrefix - Prefix for log messages
+ * @returns Promise resolving to merged prompts for all categories
+ */
+export async function getPromptCustomization(
+  settingsService?: SettingsService | null,
+  logPrefix = '[PromptHelper]'
+): Promise<{
+  autoMode: ReturnType<typeof mergeAutoModePrompts>;
+  agent: ReturnType<typeof mergeAgentPrompts>;
+  backlogPlan: ReturnType<typeof mergeBacklogPlanPrompts>;
+  enhancement: ReturnType<typeof mergeEnhancementPrompts>;
+}> {
+  let customization: PromptCustomization = {};
+
+  if (settingsService) {
+    try {
+      const globalSettings = await settingsService.getGlobalSettings();
+      customization = globalSettings.promptCustomization || {};
+      logger.info(`${logPrefix} Loaded prompt customization from settings`);
+    } catch (error) {
+      logger.error(`${logPrefix} Failed to load prompt customization:`, error);
+      // Fall through to use empty customization (all defaults)
+    }
+  } else {
+    logger.info(`${logPrefix} SettingsService not available, using default prompts`);
+  }
+
+  return {
+    autoMode: mergeAutoModePrompts(customization.autoMode),
+    agent: mergeAgentPrompts(customization.agent),
+    backlogPlan: mergeBacklogPlanPrompts(customization.backlogPlan),
+    enhancement: mergeEnhancementPrompts(customization.enhancement),
+  };
 }

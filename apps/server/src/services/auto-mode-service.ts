@@ -10,7 +10,13 @@
  */
 
 import { ProviderFactory } from '../providers/provider-factory.js';
-import type { ExecuteOptions, Feature, ModelProvider } from '@automaker/types';
+import type {
+  ExecuteOptions,
+  Feature,
+  ModelProvider,
+  PipelineConfig,
+  PipelineStep,
+} from '@automaker/types';
 import { DEFAULT_PHASE_MODELS } from '@automaker/types';
 import {
   buildPromptWithImages,
@@ -33,7 +39,15 @@ import {
 } from '../lib/sdk-options.js';
 import { FeatureLoader } from './feature-loader.js';
 import type { SettingsService } from './settings-service.js';
-import { getAutoLoadClaudeMdSetting, filterClaudeMdFromContext } from '../lib/settings-helpers.js';
+import { pipelineService, PipelineService } from './pipeline-service.js';
+import {
+  getAutoLoadClaudeMdSetting,
+  getEnableSandboxModeSetting,
+  filterClaudeMdFromContext,
+  getMCPServersFromSettings,
+  getMCPPermissionSettings,
+  getPromptCustomization,
+} from '../lib/settings-helpers.js';
 
 const execAsync = promisify(exec);
 
@@ -60,162 +74,6 @@ interface PlanSpec {
   currentTaskId?: string;
   tasks?: ParsedTask[];
 }
-
-const PLANNING_PROMPTS = {
-  lite: `## Planning Phase (Lite Mode)
-
-IMPORTANT: Do NOT output exploration text, tool usage, or thinking before the plan. Start DIRECTLY with the planning outline format below. Silently analyze the codebase first, then output ONLY the structured plan.
-
-Create a brief planning outline:
-
-1. **Goal**: What are we accomplishing? (1 sentence)
-2. **Approach**: How will we do it? (2-3 sentences)
-3. **Files to Touch**: List files and what changes
-4. **Tasks**: Numbered task list (3-7 items)
-5. **Risks**: Any gotchas to watch for
-
-After generating the outline, output:
-"[PLAN_GENERATED] Planning outline complete."
-
-Then proceed with implementation.`,
-
-  lite_with_approval: `## Planning Phase (Lite Mode)
-
-IMPORTANT: Do NOT output exploration text, tool usage, or thinking before the plan. Start DIRECTLY with the planning outline format below. Silently analyze the codebase first, then output ONLY the structured plan.
-
-Create a brief planning outline:
-
-1. **Goal**: What are we accomplishing? (1 sentence)
-2. **Approach**: How will we do it? (2-3 sentences)
-3. **Files to Touch**: List files and what changes
-4. **Tasks**: Numbered task list (3-7 items)
-5. **Risks**: Any gotchas to watch for
-
-After generating the outline, output:
-"[SPEC_GENERATED] Please review the planning outline above. Reply with 'approved' to proceed or provide feedback for revisions."
-
-DO NOT proceed with implementation until you receive explicit approval.`,
-
-  spec: `## Specification Phase (Spec Mode)
-
-IMPORTANT: Do NOT output exploration text, tool usage, or thinking before the spec. Start DIRECTLY with the specification format below. Silently analyze the codebase first, then output ONLY the structured specification.
-
-Generate a specification with an actionable task breakdown. WAIT for approval before implementing.
-
-### Specification Format
-
-1. **Problem**: What problem are we solving? (user perspective)
-
-2. **Solution**: Brief approach (1-2 sentences)
-
-3. **Acceptance Criteria**: 3-5 items in GIVEN-WHEN-THEN format
-   - GIVEN [context], WHEN [action], THEN [outcome]
-
-4. **Files to Modify**:
-   | File | Purpose | Action |
-   |------|---------|--------|
-   | path/to/file | description | create/modify/delete |
-
-5. **Implementation Tasks**:
-   Use this EXACT format for each task (the system will parse these):
-   \`\`\`tasks
-   - [ ] T001: [Description] | File: [path/to/file]
-   - [ ] T002: [Description] | File: [path/to/file]
-   - [ ] T003: [Description] | File: [path/to/file]
-   \`\`\`
-
-   Task ID rules:
-   - Sequential: T001, T002, T003, etc.
-   - Description: Clear action (e.g., "Create user model", "Add API endpoint")
-   - File: Primary file affected (helps with context)
-   - Order by dependencies (foundational tasks first)
-
-6. **Verification**: How to confirm feature works
-
-After generating the spec, output on its own line:
-"[SPEC_GENERATED] Please review the specification above. Reply with 'approved' to proceed or provide feedback for revisions."
-
-DO NOT proceed with implementation until you receive explicit approval.
-
-When approved, execute tasks SEQUENTIALLY in order. For each task:
-1. BEFORE starting, output: "[TASK_START] T###: Description"
-2. Implement the task
-3. AFTER completing, output: "[TASK_COMPLETE] T###: Brief summary"
-
-This allows real-time progress tracking during implementation.`,
-
-  full: `## Full Specification Phase (Full SDD Mode)
-
-IMPORTANT: Do NOT output exploration text, tool usage, or thinking before the spec. Start DIRECTLY with the specification format below. Silently analyze the codebase first, then output ONLY the structured specification.
-
-Generate a comprehensive specification with phased task breakdown. WAIT for approval before implementing.
-
-### Specification Format
-
-1. **Problem Statement**: 2-3 sentences from user perspective
-
-2. **User Story**: As a [user], I want [goal], so that [benefit]
-
-3. **Acceptance Criteria**: Multiple scenarios with GIVEN-WHEN-THEN
-   - **Happy Path**: GIVEN [context], WHEN [action], THEN [expected outcome]
-   - **Edge Cases**: GIVEN [edge condition], WHEN [action], THEN [handling]
-   - **Error Handling**: GIVEN [error condition], WHEN [action], THEN [error response]
-
-4. **Technical Context**:
-   | Aspect | Value |
-   |--------|-------|
-   | Affected Files | list of files |
-   | Dependencies | external libs if any |
-   | Constraints | technical limitations |
-   | Patterns to Follow | existing patterns in codebase |
-
-5. **Non-Goals**: What this feature explicitly does NOT include
-
-6. **Implementation Tasks**:
-   Use this EXACT format for each task (the system will parse these):
-   \`\`\`tasks
-   ## Phase 1: Foundation
-   - [ ] T001: [Description] | File: [path/to/file]
-   - [ ] T002: [Description] | File: [path/to/file]
-
-   ## Phase 2: Core Implementation
-   - [ ] T003: [Description] | File: [path/to/file]
-   - [ ] T004: [Description] | File: [path/to/file]
-
-   ## Phase 3: Integration & Testing
-   - [ ] T005: [Description] | File: [path/to/file]
-   - [ ] T006: [Description] | File: [path/to/file]
-   \`\`\`
-
-   Task ID rules:
-   - Sequential across all phases: T001, T002, T003, etc.
-   - Description: Clear action verb + target
-   - File: Primary file affected
-   - Order by dependencies within each phase
-   - Phase structure helps organize complex work
-
-7. **Success Metrics**: How we know it's done (measurable criteria)
-
-8. **Risks & Mitigations**:
-   | Risk | Mitigation |
-   |------|------------|
-   | description | approach |
-
-After generating the spec, output on its own line:
-"[SPEC_GENERATED] Please review the comprehensive specification above. Reply with 'approved' to proceed or provide feedback for revisions."
-
-DO NOT proceed with implementation until you receive explicit approval.
-
-When approved, execute tasks SEQUENTIALLY by phase. For each task:
-1. BEFORE starting, output: "[TASK_START] T###: Description"
-2. Implement the task
-3. AFTER completing, output: "[TASK_COMPLETE] T###: Brief summary"
-
-After completing all tasks in a phase, output:
-"[PHASE_COMPLETE] Phase N complete"
-
-This allows real-time progress tracking during implementation.`,
-};
 
 /**
  * Parse tasks from generated spec content
@@ -589,7 +447,7 @@ export class AutoModeService {
       } else {
         // Normal flow: build prompt with planning phase
         const featurePrompt = this.buildFeaturePrompt(feature);
-        const planningPrefix = this.getPlanningPromptPrefix(feature);
+        const planningPrefix = await this.getPlanningPromptPrefix(feature);
         prompt = planningPrefix + featurePrompt;
 
         // Emit planning mode info
@@ -637,6 +495,23 @@ export class AutoModeService {
         }
       );
 
+      // Check for pipeline steps and execute them
+      const pipelineConfig = await pipelineService.getPipelineConfig(projectPath);
+      const sortedSteps = [...(pipelineConfig?.steps || [])].sort((a, b) => a.order - b.order);
+
+      if (sortedSteps.length > 0) {
+        // Execute pipeline steps sequentially
+        await this.executePipelineSteps(
+          projectPath,
+          featureId,
+          feature,
+          sortedSteps,
+          workDir,
+          abortController,
+          autoLoadClaudeMd
+        );
+      }
+
       // Determine final status based on testing mode:
       // - skipTests=false (automated testing): go directly to 'verified' (no manual verify needed)
       // - skipTests=true (manual verification): go to 'waiting_approval' for manual review
@@ -680,6 +555,143 @@ export class AutoModeService {
       );
       this.runningFeatures.delete(featureId);
     }
+  }
+
+  /**
+   * Execute pipeline steps sequentially after initial feature implementation
+   */
+  private async executePipelineSteps(
+    projectPath: string,
+    featureId: string,
+    feature: Feature,
+    steps: PipelineStep[],
+    workDir: string,
+    abortController: AbortController,
+    autoLoadClaudeMd: boolean
+  ): Promise<void> {
+    console.log(`[AutoMode] Executing ${steps.length} pipeline step(s) for feature ${featureId}`);
+
+    // Load context files once
+    const contextResult = await loadContextFiles({
+      projectPath,
+      fsModule: secureFs as Parameters<typeof loadContextFiles>[0]['fsModule'],
+    });
+    const contextFilesPrompt = filterClaudeMdFromContext(contextResult, autoLoadClaudeMd);
+
+    // Load previous agent output for context continuity
+    const featureDir = getFeatureDir(projectPath, featureId);
+    const contextPath = path.join(featureDir, 'agent-output.md');
+    let previousContext = '';
+    try {
+      previousContext = (await secureFs.readFile(contextPath, 'utf-8')) as string;
+    } catch {
+      // No previous context
+    }
+
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const pipelineStatus = `pipeline_${step.id}`;
+
+      // Update feature status to current pipeline step
+      await this.updateFeatureStatus(projectPath, featureId, pipelineStatus);
+
+      this.emitAutoModeEvent('auto_mode_progress', {
+        featureId,
+        content: `Starting pipeline step ${i + 1}/${steps.length}: ${step.name}`,
+        projectPath,
+      });
+
+      this.emitAutoModeEvent('pipeline_step_started', {
+        featureId,
+        stepId: step.id,
+        stepName: step.name,
+        stepIndex: i,
+        totalSteps: steps.length,
+        projectPath,
+      });
+
+      // Build prompt for this pipeline step
+      const prompt = this.buildPipelineStepPrompt(step, feature, previousContext);
+
+      // Get model from feature
+      const model = resolveModelString(feature.model, DEFAULT_MODELS.claude);
+
+      // Run the agent for this pipeline step
+      await this.runAgent(
+        workDir,
+        featureId,
+        prompt,
+        abortController,
+        projectPath,
+        undefined, // no images for pipeline steps
+        model,
+        {
+          projectPath,
+          planningMode: 'skip', // Pipeline steps don't need planning
+          requirePlanApproval: false,
+          previousContent: previousContext,
+          systemPrompt: contextFilesPrompt || undefined,
+          autoLoadClaudeMd,
+        }
+      );
+
+      // Load updated context for next step
+      try {
+        previousContext = (await secureFs.readFile(contextPath, 'utf-8')) as string;
+      } catch {
+        // No context update
+      }
+
+      this.emitAutoModeEvent('pipeline_step_complete', {
+        featureId,
+        stepId: step.id,
+        stepName: step.name,
+        stepIndex: i,
+        totalSteps: steps.length,
+        projectPath,
+      });
+
+      console.log(
+        `[AutoMode] Pipeline step ${i + 1}/${steps.length} (${step.name}) completed for feature ${featureId}`
+      );
+    }
+
+    console.log(`[AutoMode] All pipeline steps completed for feature ${featureId}`);
+  }
+
+  /**
+   * Build the prompt for a pipeline step
+   */
+  private buildPipelineStepPrompt(
+    step: PipelineStep,
+    feature: Feature,
+    previousContext: string
+  ): string {
+    let prompt = `## Pipeline Step: ${step.name}
+
+This is an automated pipeline step following the initial feature implementation.
+
+### Feature Context
+${this.buildFeaturePrompt(feature)}
+
+`;
+
+    if (previousContext) {
+      prompt += `### Previous Work
+The following is the output from the previous work on this feature:
+
+${previousContext}
+
+`;
+    }
+
+    prompt += `### Pipeline Step Instructions
+${step.instructions}
+
+### Task
+Complete the pipeline step instructions above. Review the previous work and apply the required changes or actions.`;
+
+    return prompt;
   }
 
   /**
@@ -1175,6 +1187,7 @@ Format your response as a structured markdown document.`;
         allowedTools: sdkOptions.allowedTools as string[],
         abortController,
         settingSources: sdkOptions.settingSources,
+        sandbox: sdkOptions.sandbox, // Pass sandbox configuration
       };
 
       const stream = provider.executeQuery(options);
@@ -1238,22 +1251,47 @@ Format your response as a structured markdown document.`;
   /**
    * Get detailed info about all running agents
    */
-  getRunningAgents(): Array<{
-    featureId: string;
-    projectPath: string;
-    projectName: string;
-    isAutoMode: boolean;
-    model?: string;
-    provider?: ModelProvider;
-  }> {
-    return Array.from(this.runningFeatures.values()).map((rf) => ({
-      featureId: rf.featureId,
-      projectPath: rf.projectPath,
-      projectName: path.basename(rf.projectPath),
-      isAutoMode: rf.isAutoMode,
-      model: rf.model,
-      provider: rf.provider,
-    }));
+  async getRunningAgents(): Promise<
+    Array<{
+      featureId: string;
+      projectPath: string;
+      projectName: string;
+      isAutoMode: boolean;
+      model?: string;
+      provider?: ModelProvider;
+      title?: string;
+      description?: string;
+    }>
+  > {
+    const agents = await Promise.all(
+      Array.from(this.runningFeatures.values()).map(async (rf) => {
+        // Try to fetch feature data to get title and description
+        let title: string | undefined;
+        let description: string | undefined;
+
+        try {
+          const feature = await this.featureLoader.get(rf.projectPath, rf.featureId);
+          if (feature) {
+            title = feature.title;
+            description = feature.description;
+          }
+        } catch (error) {
+          // Silently ignore errors - title/description are optional
+        }
+
+        return {
+          featureId: rf.featureId,
+          projectPath: rf.projectPath,
+          projectName: path.basename(rf.projectPath),
+          isAutoMode: rf.isAutoMode,
+          model: rf.model,
+          provider: rf.provider,
+          title,
+          description,
+        };
+      })
+    );
+    return agents;
   }
 
   /**
@@ -1627,12 +1665,21 @@ Format your response as a structured markdown document.`;
   /**
    * Get the planning prompt prefix based on feature's planning mode
    */
-  private getPlanningPromptPrefix(feature: Feature): string {
+  private async getPlanningPromptPrefix(feature: Feature): Promise<string> {
     const mode = feature.planningMode || 'skip';
 
     if (mode === 'skip') {
       return ''; // No planning phase
     }
+
+    // Load prompts from settings (no caching - allows hot reload of custom prompts)
+    const prompts = await getPromptCustomization(this.settingsService, '[AutoMode]');
+    const planningPrompts: Record<string, string> = {
+      lite: prompts.autoMode.planningLite,
+      lite_with_approval: prompts.autoMode.planningLiteWithApproval,
+      spec: prompts.autoMode.planningSpec,
+      full: prompts.autoMode.planningFull,
+    };
 
     // For lite mode, use the approval variant if requirePlanApproval is true
     let promptKey: string = mode;
@@ -1640,7 +1687,7 @@ Format your response as a structured markdown document.`;
       promptKey = 'lite_with_approval';
     }
 
-    const planningPrompt = PLANNING_PROMPTS[promptKey as keyof typeof PLANNING_PROMPTS];
+    const planningPrompt = planningPrompts[promptKey];
     if (!planningPrompt) {
       return '';
     }
@@ -1863,12 +1910,25 @@ This mock response was generated because AUTOMAKER_MOCK_AGENT=true was set.
         ? options.autoLoadClaudeMd
         : await getAutoLoadClaudeMdSetting(finalProjectPath, this.settingsService, '[AutoMode]');
 
+    // Load enableSandboxMode setting (global setting only)
+    const enableSandboxMode = await getEnableSandboxModeSetting(this.settingsService, '[AutoMode]');
+
+    // Load MCP servers from settings (global setting only)
+    const mcpServers = await getMCPServersFromSettings(this.settingsService, '[AutoMode]');
+
+    // Load MCP permission settings (global setting only)
+    const mcpPermissions = await getMCPPermissionSettings(this.settingsService, '[AutoMode]');
+
     // Build SDK options using centralized configuration for feature implementation
     const sdkOptions = createAutoModeOptions({
       cwd: workDir,
       model: model,
       abortController,
       autoLoadClaudeMd,
+      enableSandboxMode,
+      mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
+      mcpAutoApproveTools: mcpPermissions.mcpAutoApproveTools,
+      mcpUnrestrictedTools: mcpPermissions.mcpUnrestrictedTools,
     });
 
     // Extract model, maxTurns, and allowedTools from SDK options
@@ -1909,6 +1969,10 @@ This mock response was generated because AUTOMAKER_MOCK_AGENT=true was set.
       abortController,
       systemPrompt: sdkOptions.systemPrompt,
       settingSources: sdkOptions.settingSources,
+      sandbox: sdkOptions.sandbox, // Pass sandbox configuration
+      mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined, // Pass MCP servers configuration
+      mcpAutoApproveTools: mcpPermissions.mcpAutoApproveTools, // Pass MCP auto-approve setting
+      mcpUnrestrictedTools: mcpPermissions.mcpUnrestrictedTools, // Pass MCP unrestricted tools setting
     };
 
     // Execute via provider
@@ -2195,6 +2259,9 @@ After generating the revised spec, output:
                         cwd: workDir,
                         allowedTools: allowedTools,
                         abortController,
+                        mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
+                        mcpAutoApproveTools: mcpPermissions.mcpAutoApproveTools,
+                        mcpUnrestrictedTools: mcpPermissions.mcpUnrestrictedTools,
                       });
 
                       let revisionText = '';
@@ -2332,6 +2399,9 @@ After generating the revised spec, output:
                     cwd: workDir,
                     allowedTools: allowedTools,
                     abortController,
+                    mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
+                    mcpAutoApproveTools: mcpPermissions.mcpAutoApproveTools,
+                    mcpUnrestrictedTools: mcpPermissions.mcpUnrestrictedTools,
                   });
 
                   let taskOutput = '';
@@ -2421,6 +2491,9 @@ Implement all the changes described in the plan above.`;
                   cwd: workDir,
                   allowedTools: allowedTools,
                   abortController,
+                  mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
+                  mcpAutoApproveTools: mcpPermissions.mcpAutoApproveTools,
+                  mcpUnrestrictedTools: mcpPermissions.mcpUnrestrictedTools,
                 });
 
                 for await (const msg of continuationStream) {

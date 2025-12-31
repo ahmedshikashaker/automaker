@@ -4,6 +4,8 @@ export type SettingsViewId =
   | 'api-keys'
   | 'claude'
   | 'providers'
+  | 'mcp-servers'
+  | 'prompts'
   | 'ai-enhancement'
   | 'phase-models'
   | 'appearance'

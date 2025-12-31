@@ -21,6 +21,7 @@ import { useEffect, useState, useRef } from 'react';
 import { getHttpApiClient } from '@/lib/http-api-client';
 import { isElectron } from '@/lib/electron';
 import { getItem, removeItem } from '@/lib/storage';
+import { useAppStore } from '@/store/app-store';
 
 /**
  * State returned by useSettingsMigration hook
@@ -188,13 +189,9 @@ export function useSettingsMigration(): MigrationState {
  * Call this when important global settings change (theme, UI preferences, profiles, etc.)
  * Safe to call from store subscribers or change handlers.
  *
- * Only functions in Electron mode. Returns false if not in Electron or on error.
- *
  * @returns Promise resolving to true if sync succeeded, false otherwise
  */
 export async function syncSettingsToServer(): Promise<boolean> {
-  if (!isElectron()) return false;
-
   try {
     const api = getHttpApiClient();
     const automakerStorage = getItem('automaker-storage');
@@ -225,8 +222,13 @@ export async function syncSettingsToServer(): Promise<boolean> {
       validationModel: state.validationModel,
       phaseModels: state.phaseModels,
       autoLoadClaudeMd: state.autoLoadClaudeMd,
+      enableSandboxMode: state.enableSandboxMode,
       keyboardShortcuts: state.keyboardShortcuts,
       aiProfiles: state.aiProfiles,
+      mcpServers: state.mcpServers,
+      mcpAutoApproveTools: state.mcpAutoApproveTools,
+      mcpUnrestrictedTools: state.mcpUnrestrictedTools,
+      promptCustomization: state.promptCustomization,
       projects: state.projects,
       trashedProjects: state.trashedProjects,
       projectHistory: state.projectHistory,
@@ -251,8 +253,6 @@ export async function syncSettingsToServer(): Promise<boolean> {
  * Call this when API keys are added or updated in settings UI.
  * Only requires providing the keys that have changed.
  *
- * Only functions in Electron mode. Returns false if not in Electron or on error.
- *
  * @param apiKeys - Partial credential object with optional anthropic, google, openai keys
  * @returns Promise resolving to true if sync succeeded, false otherwise
  */
@@ -261,8 +261,6 @@ export async function syncCredentialsToServer(apiKeys: {
   google?: string;
   openai?: string;
 }): Promise<boolean> {
-  if (!isElectron()) return false;
-
   try {
     const api = getHttpApiClient();
     const result = await api.settings.updateCredentials({ apiKeys });
@@ -283,7 +281,6 @@ export async function syncCredentialsToServer(apiKeys: {
  * Supports partial updates - only include fields that have changed.
  *
  * Call this when project settings are modified in the board or settings UI.
- * Only functions in Electron mode. Returns false if not in Electron or on error.
  *
  * @param projectPath - Absolute path to project directory
  * @param updates - Partial ProjectSettings with optional theme, worktree, and board settings
@@ -305,14 +302,47 @@ export async function syncProjectSettingsToServer(
     }>;
   }
 ): Promise<boolean> {
-  if (!isElectron()) return false;
-
   try {
     const api = getHttpApiClient();
     const result = await api.settings.updateProject(projectPath, updates);
     return result.success;
   } catch (error) {
     console.error('[Settings Sync] Failed to sync project settings:', error);
+    return false;
+  }
+}
+
+/**
+ * Load MCP servers from server settings file into the store
+ *
+ * Fetches the global settings from the server and updates the store's
+ * mcpServers state. Useful when settings were modified externally
+ * (e.g., by editing the settings.json file directly).
+ *
+ * @returns Promise resolving to true if load succeeded, false otherwise
+ */
+export async function loadMCPServersFromServer(): Promise<boolean> {
+  try {
+    const api = getHttpApiClient();
+    const result = await api.settings.getGlobal();
+
+    if (!result.success || !result.settings) {
+      console.error('[Settings Load] Failed to load settings:', result.error);
+      return false;
+    }
+
+    const mcpServers = result.settings.mcpServers || [];
+    const mcpAutoApproveTools = result.settings.mcpAutoApproveTools ?? true;
+    const mcpUnrestrictedTools = result.settings.mcpUnrestrictedTools ?? true;
+
+    // Clear existing and add all from server
+    // We need to update the store directly since we can't use hooks here
+    useAppStore.setState({ mcpServers, mcpAutoApproveTools, mcpUnrestrictedTools });
+
+    console.log(`[Settings Load] Loaded ${mcpServers.length} MCP servers from server`);
+    return true;
+  } catch (error) {
+    console.error('[Settings Load] Failed to load MCP servers:', error);
     return false;
   }
 }

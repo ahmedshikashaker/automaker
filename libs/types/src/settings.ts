@@ -9,6 +9,7 @@
 import type { ModelAlias } from './model.js';
 import type { CursorModelId } from './cursor-models.js';
 import { CURSOR_MODEL_MAP, getAllCursorModelIds } from './cursor-models.js';
+import type { PromptCustomization } from './prompts.js';
 
 // Re-export ModelAlias for convenience
 export type { ModelAlias };
@@ -238,6 +239,55 @@ export function getProfileModelString(profile: AIProfile): string {
 }
 
 /**
+ * MCPToolInfo - Information about a tool provided by an MCP server
+ *
+ * Contains the tool's name, description, and whether it's enabled for use.
+ */
+export interface MCPToolInfo {
+  /** Tool name as exposed by the MCP server */
+  name: string;
+  /** Description of what the tool does */
+  description?: string;
+  /** JSON Schema for the tool's input parameters */
+  inputSchema?: Record<string, unknown>;
+  /** Whether this tool is enabled for use (defaults to true) */
+  enabled: boolean;
+}
+
+/**
+ * MCPServerConfig - Configuration for an MCP (Model Context Protocol) server
+ *
+ * MCP servers provide additional tools and capabilities to AI agents.
+ * Supports stdio (subprocess), SSE, and HTTP transport types.
+ */
+export interface MCPServerConfig {
+  /** Unique identifier for the server config */
+  id: string;
+  /** Display name for the server */
+  name: string;
+  /** User-friendly description of what this server provides */
+  description?: string;
+  /** Transport type: stdio (default), sse, or http */
+  type?: 'stdio' | 'sse' | 'http';
+  /** For stdio: command to execute (e.g., 'node', 'python', 'npx') */
+  command?: string;
+  /** For stdio: arguments to pass to the command */
+  args?: string[];
+  /** For stdio: environment variables to set */
+  env?: Record<string, string>;
+  /** For sse/http: URL endpoint */
+  url?: string;
+  /** For sse/http: headers to include in requests */
+  headers?: Record<string, string>;
+  /** Whether this server is enabled */
+  enabled?: boolean;
+  /** Tools discovered from this server with their enabled states */
+  tools?: MCPToolInfo[];
+  /** Timestamp when tools were last fetched */
+  toolsLastFetched?: string;
+}
+
+/**
  * ProjectRef - Minimal reference to a project stored in global settings
  *
  * Used for the projects list and project history. Full project data is loaded separately.
@@ -385,6 +435,20 @@ export interface GlobalSettings {
   // Claude Agent SDK Settings
   /** Auto-load CLAUDE.md files using SDK's settingSources option */
   autoLoadClaudeMd?: boolean;
+  /** Enable sandbox mode for bash commands (default: true, disable if issues occur) */
+  enableSandboxMode?: boolean;
+
+  // MCP Server Configuration
+  /** List of configured MCP servers for agent use */
+  mcpServers: MCPServerConfig[];
+  /** Auto-approve MCP tool calls without permission prompts (uses bypassPermissions mode) */
+  mcpAutoApproveTools?: boolean;
+  /** Allow unrestricted tools when MCP servers are enabled (don't filter allowedTools) */
+  mcpUnrestrictedTools?: boolean;
+
+  // Prompt Customization
+  /** Custom prompts for Auto Mode, Agent Runner, Backlog Planning, and Enhancements */
+  promptCustomization?: PromptCustomization;
 }
 
 /**
@@ -563,6 +627,12 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   worktreePanelCollapsed: false,
   lastSelectedSessionByProject: {},
   autoLoadClaudeMd: false,
+  enableSandboxMode: true,
+  mcpServers: [],
+  // Default to true for autonomous workflow. Security is enforced when adding servers
+  // via the security warning dialog that explains the risks.
+  mcpAutoApproveTools: true,
+  mcpUnrestrictedTools: true,
 };
 
 /** Default credentials (empty strings - user must provide API keys) */

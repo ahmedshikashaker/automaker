@@ -18,6 +18,7 @@ import {
   getByTestId,
   waitForNetworkIdle,
   getContextEditorContent,
+  authenticateForTests,
 } from '../utils';
 
 test.describe('Context File Management', () => {
@@ -31,6 +32,7 @@ test.describe('Context File Management', () => {
 
   test('should create a new markdown context file', async ({ page }) => {
     await setupProjectWithFixture(page, getFixturePath());
+    await authenticateForTests(page);
     await page.goto('/');
     await waitForNetworkIdle(page);
 
@@ -50,7 +52,8 @@ test.describe('Context File Management', () => {
       { timeout: 5000 }
     );
 
-    await waitForContextFile(page, 'test-context.md', 10000);
+    await waitForNetworkIdle(page);
+    await waitForContextFile(page, 'test-context.md');
 
     const fileButton = await getByTestId(page, 'context-file-test-context.md');
     await expect(fileButton).toBeVisible();

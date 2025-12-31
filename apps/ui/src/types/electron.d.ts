@@ -191,6 +191,24 @@ export type AutoModeEvent =
       message: string;
     }
   | {
+      type: 'pipeline_step_started';
+      featureId: string;
+      projectPath?: string;
+      stepId: string;
+      stepName: string;
+      stepIndex: number;
+      totalSteps: number;
+    }
+  | {
+      type: 'pipeline_step_complete';
+      featureId: string;
+      projectPath?: string;
+      stepId: string;
+      stepName: string;
+      stepIndex: number;
+      totalSteps: number;
+    }
+  | {
       type: 'auto_mode_error';
       error: string;
       errorType?: 'authentication' | 'cancellation' | 'abort' | 'execution';
@@ -446,6 +464,7 @@ export interface AutoModeAPI {
 
 export interface ElectronAPI {
   ping: () => Promise<string>;
+  getApiKey?: () => Promise<string | null>;
   openExternalLink: (url: string) => Promise<{ success: boolean; error?: string }>;
 
   // Dialog APIs

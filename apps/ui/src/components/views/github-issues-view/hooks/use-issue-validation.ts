@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getElectronAPI,
   GitHubIssue,
+  GitHubComment,
   IssueValidationResult,
   IssueValidationEvent,
   StoredValidation,
 } from '@/lib/electron';
+import type { LinkedPRInfo } from '@automaker/types';
 import { useAppStore } from '@/store/app-store';
 import { toast } from 'sonner';
 import { isValidationStale } from '../utils';
@@ -205,8 +207,16 @@ export function useIssueValidation({
   }, []);
 
   const handleValidateIssue = useCallback(
-    async (issue: GitHubIssue, options: { forceRevalidate?: boolean; model?: string } = {}) => {
-      const { forceRevalidate = false, model } = options;
+    async (
+      issue: GitHubIssue,
+      options: {
+        forceRevalidate?: boolean;
+        model?: string;
+        comments?: GitHubComment[];
+        linkedPRs?: LinkedPRInfo[];
+      } = {}
+    ) => {
+      const { forceRevalidate = false, model, comments, linkedPRs } = options;
 
       if (!currentProject?.path) {
         toast.error('No project selected');
@@ -239,14 +249,17 @@ export function useIssueValidation({
       try {
         const api = getElectronAPI();
         if (api.github?.validateIssue) {
+          const validationInput = {
+            issueNumber: issue.number,
+            issueTitle: issue.title,
+            issueBody: issue.body || '',
+            issueLabels: issue.labels.map((l) => l.name),
+            comments, // Include comments if provided
+            linkedPRs, // Include linked PRs if provided
+          };
           const result = await api.github.validateIssue(
             currentProject.path,
-            {
-              issueNumber: issue.number,
-              issueTitle: issue.title,
-              issueBody: issue.body || '',
-              issueLabels: issue.labels.map((l) => l.name),
-            },
+            validationInput,
             modelToUse
           );
 

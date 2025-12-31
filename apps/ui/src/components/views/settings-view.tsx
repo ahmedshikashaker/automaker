@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '@/store/app-store';
+import { useSetupStore } from '@/store/setup-store';
 
 import { useSettingsView } from './settings-view/hooks';
 import { NAV_ITEMS } from './settings-view/config/navigation';
@@ -17,6 +18,8 @@ import { KeyboardShortcutsSection } from './settings-view/keyboard-shortcuts/key
 import { FeatureDefaultsSection } from './settings-view/feature-defaults/feature-defaults-section';
 import { DangerZoneSection } from './settings-view/danger-zone/danger-zone-section';
 import { ProviderTabs } from './settings-view/providers';
+import { MCPServersSection } from './settings-view/mcp-servers';
+import { PromptCustomizationSection } from './settings-view/prompts';
 import type { Project as SettingsProject, Theme } from './settings-view/shared/types';
 import type { Project as ElectronProject } from '@/lib/electron';
 
@@ -46,6 +49,12 @@ export function SettingsView() {
     aiProfiles,
     validationModel,
     setValidationModel,
+    autoLoadClaudeMd,
+    setAutoLoadClaudeMd,
+    enableSandboxMode,
+    setEnableSandboxMode,
+    promptCustomization,
+    setPromptCustomization,
   } = useAppStore();
 
   // Convert electron Project to settings-view Project type
@@ -87,6 +96,15 @@ export function SettingsView() {
       case 'providers':
       case 'claude': // Backwards compatibility
         return <ProviderTabs defaultTab={activeView === 'claude' ? 'claude' : undefined} />;
+      case 'mcp-servers':
+        return <MCPServersSection />;
+      case 'prompts':
+        return (
+          <PromptCustomizationSection
+            promptCustomization={promptCustomization}
+            onPromptCustomizationChange={setPromptCustomization}
+          />
+        );
       case 'ai-enhancement':
         return <AIEnhancementSection />;
       case 'phase-models':

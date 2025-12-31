@@ -6,8 +6,9 @@
  */
 
 import path from 'path';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import fs from 'fs';
+import crypto from 'crypto';
 import http, { Server } from 'http';
 import { app, BrowserWindow, ipcMain, dialog, shell, screen } from 'electron';
 import { findNodeExecutable, buildEnhancedPath } from '@automaker/platform';
@@ -37,19 +38,13 @@ const STATIC_PORT = 3007;
 // ============================================
 // Calculation: 4 columns × 280px + 3 gaps × 20px + 40px padding = 1220px board content
 // With sidebar expanded (288px): 1220 + 288 = 1508px
-// With sidebar collapsed (64px): 1220 + 64 = 1284px
-const COLUMN_MIN_WIDTH = 280;
-const COLUMN_COUNT = 4;
-const GAP_SIZE = 20;
-const BOARD_PADDING = 40; // px-5 on both sides = 40px (matches gap between columns)
+// Minimum window dimensions - reduced to allow smaller windows since kanban now supports horizontal scrolling
 const SIDEBAR_EXPANDED = 288;
 const SIDEBAR_COLLAPSED = 64;
 
-const BOARD_CONTENT_MIN =
-  COLUMN_MIN_WIDTH * COLUMN_COUNT + GAP_SIZE * (COLUMN_COUNT - 1) + BOARD_PADDING;
-const MIN_WIDTH_EXPANDED = BOARD_CONTENT_MIN + SIDEBAR_EXPANDED; // 1500px
-const MIN_WIDTH_COLLAPSED = BOARD_CONTENT_MIN + SIDEBAR_COLLAPSED; // 1276px
-const MIN_HEIGHT = 650; // Ensures sidebar content fits without scrolling
+const MIN_WIDTH_EXPANDED = 800; // Reduced - horizontal scrolling handles overflow
+const MIN_WIDTH_COLLAPSED = 600; // Reduced - horizontal scrolling handles overflow
+const MIN_HEIGHT = 500; // Reduced to allow more flexibility
 const DEFAULT_WIDTH = 1600;
 const DEFAULT_HEIGHT = 950;
 
@@ -64,6 +59,46 @@ interface WindowBounds {
 
 // Debounce timer for saving window bounds
 let saveWindowBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// API key for CSRF protection
+let apiKey: string | null = null;
+
+/**
+ * Get path to API key file in user data directory
+ */
+function getApiKeyPath(): string {
+  return path.join(app.getPath('userData'), '.api-key');
+}
+
+/**
+ * Ensure an API key exists - load from file or generate new one.
+ * This key is passed to the server for CSRF protection.
+ */
+function ensureApiKey(): string {
+  const keyPath = getApiKeyPath();
+  try {
+    if (fs.existsSync(keyPath)) {
+      const key = fs.readFileSync(keyPath, 'utf-8').trim();
+      if (key) {
+        apiKey = key;
+        console.log('[Electron] Loaded existing API key');
+        return apiKey;
+      }
+    }
+  } catch (error) {
+    console.warn('[Electron] Error reading API key:', error);
+  }
+
+  // Generate new key
+  apiKey = crypto.randomUUID();
+  try {
+    fs.writeFileSync(keyPath, apiKey, { encoding: 'utf-8', mode: 0o600 });
+    console.log('[Electron] Generated new API key');
+  } catch (error) {
+    console.error('[Electron] Failed to save API key:', error);
+  }
+  return apiKey;
+}
 
 /**
  * Get icon path - works in both dev and production, cross-platform
@@ -199,7 +234,7 @@ function validateBounds(bounds: WindowBounds): WindowBounds {
   // Ensure minimum dimensions
   return {
     ...bounds,
-    width: Math.max(bounds.width, MIN_WIDTH_EXPANDED),
+    width: Math.max(bounds.width, MIN_WIDTH_COLLAPSED),
     height: Math.max(bounds.height, MIN_HEIGHT),
   };
 }
@@ -337,6 +372,8 @@ async function startServer(): Promise<void> {
     PORT: SERVER_PORT.toString(),
     DATA_DIR: app.getPath('userData'),
     NODE_PATH: serverNodeModules,
+    // Pass API key to server for CSRF protection
+    AUTOMAKER_API_KEY: apiKey!,
     // Only set ALLOWED_ROOT_DIRECTORY if explicitly provided in environment
     // If not set, server will allow access to all paths
     ...(process.env.ALLOWED_ROOT_DIRECTORY && {
@@ -420,7 +457,7 @@ function createWindow(): void {
     height: validBounds?.height ?? DEFAULT_HEIGHT,
     x: validBounds?.x,
     y: validBounds?.y,
-    minWidth: MIN_WIDTH_EXPANDED, // 1500px - ensures kanban columns fit with sidebar
+    minWidth: MIN_WIDTH_COLLAPSED, // Small minimum - horizontal scrolling handles overflow
     minHeight: MIN_HEIGHT,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -515,6 +552,9 @@ app.whenReady().then(async () => {
     }
   }
 
+  // Generate or load API key for CSRF protection (before starting server)
+  ensureApiKey();
+
   try {
     // Start static file server in production
     if (app.isPackaged) {
@@ -555,9 +595,20 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  if (serverProcess) {
+  if (serverProcess && serverProcess.pid) {
     console.log('[Electron] Stopping server...');
-    serverProcess.kill();
+    if (process.platform === 'win32') {
+      try {
+        // Windows: use taskkill with /t to kill entire process tree
+        // This prevents orphaned node processes when closing the app
+        // Using execSync to ensure process is killed before app exits
+        execSync(`taskkill /f /t /pid ${serverProcess.pid}`, { stdio: 'ignore' });
+      } catch (error) {
+        console.error('[Electron] Failed to kill server process:', (error as Error).message);
+      }
+    } else {
+      serverProcess.kill('SIGTERM');
+    }
     serverProcess = null;
   }
 
@@ -672,16 +723,16 @@ ipcMain.handle('server:getUrl', async () => {
   return `http://localhost:${SERVER_PORT}`;
 });
 
+// Get API key for authentication
+ipcMain.handle('auth:getApiKey', () => {
+  return apiKey;
+});
+
 // Window management - update minimum width based on sidebar state
-ipcMain.handle('window:updateMinWidth', (_, sidebarExpanded: boolean) => {
+// Now uses a fixed small minimum since horizontal scrolling handles overflow
+ipcMain.handle('window:updateMinWidth', (_, _sidebarExpanded: boolean) => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
-  const minWidth = sidebarExpanded ? MIN_WIDTH_EXPANDED : MIN_WIDTH_COLLAPSED;
-  mainWindow.setMinimumSize(minWidth, MIN_HEIGHT);
-
-  // If current width is below new minimum, resize window
-  const currentBounds = mainWindow.getBounds();
-  if (currentBounds.width < minWidth) {
-    mainWindow.setSize(minWidth, currentBounds.height);
-  }
+  // Always use the smaller minimum width - horizontal scrolling handles any overflow
+  mainWindow.setMinimumSize(MIN_WIDTH_COLLAPSED, MIN_HEIGHT);
 });

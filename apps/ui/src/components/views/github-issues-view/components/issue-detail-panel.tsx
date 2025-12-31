@@ -10,13 +10,20 @@ import {
   GitPullRequest,
   User,
   RefreshCw,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Markdown } from '@/components/ui/markdown';
 import { cn } from '@/lib/utils';
 import type { IssueDetailPanelProps } from '../types';
 import { isValidationStale } from '../utils';
 import { ModelOverrideTrigger } from '@/components/shared';
+import { useIssueComments } from '../hooks';
+import { CommentItem } from './comment-item';
 
 export function IssueDetailPanel({
   issue,
@@ -33,6 +40,32 @@ export function IssueDetailPanel({
   const isValidating = validatingIssues.has(issue.number);
   const cached = cachedValidations.get(issue.number);
   const isStale = cached ? isValidationStale(cached.validatedAt) : false;
+
+  // Comments state
+  const [commentsExpanded, setCommentsExpanded] = useState(true);
+  const [includeCommentsInAnalysis, setIncludeCommentsInAnalysis] = useState(true);
+  const {
+    comments,
+    totalCount,
+    loading: commentsLoading,
+    loadingMore,
+    hasNextPage,
+    error: commentsError,
+    loadMore,
+  } = useIssueComments(issue.number);
+
+  // Helper to get validation options with comments and linked PRs
+  const getValidationOptions = (forceRevalidate = false) => {
+    return {
+      forceRevalidate,
+      comments: includeCommentsInAnalysis && comments.length > 0 ? comments : undefined,
+      linkedPRs: issue.linkedPRs?.map((pr) => ({
+        number: pr.number,
+        title: pr.title,
+        state: pr.state,
+      })),
+    };
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -69,7 +102,7 @@ export function IssueDetailPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={onShowRevalidateConfirm}
+                    onClick={() => onShowRevalidateConfirm(getValidationOptions(true))}
                     title="Re-validate"
                   >
                     <RefreshCw className="h-4 w-4" />
@@ -96,12 +129,7 @@ export function IssueDetailPanel({
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={() =>
-                      onValidateIssue(issue, {
-                        forceRevalidate: true,
-                        model: modelOverride.effectiveModel,
-                      })
-                    }
+                    onClick={() => onValidateIssue(issue, getValidationOptions(true))}
                   >
                     <Wand2 className="h-4 w-4 mr-1" />
                     Re-validate
@@ -123,7 +151,7 @@ export function IssueDetailPanel({
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => onValidateIssue(issue, { model: modelOverride.effectiveModel })}
+                  onClick={() => onValidateIssue(issue, getValidationOptions())}
                 >
                   <Wand2 className="h-4 w-4 mr-1" />
                   Validate with AI
@@ -254,6 +282,74 @@ export function IssueDetailPanel({
         ) : (
           <p className="text-sm text-muted-foreground italic">No description provided.</p>
         )}
+
+        {/* Comments Section */}
+        <div className="mt-6 p-3 rounded-lg bg-muted/30 border border-border">
+          <div className="flex items-center justify-between">
+            <button
+              className="flex items-center gap-2 text-left"
+              onClick={() => setCommentsExpanded(!commentsExpanded)}
+            >
+              <MessageSquare className="h-4 w-4 text-blue-500" />
+              <span className="text-sm font-medium">
+                Comments {totalCount > 0 && `(${totalCount})`}
+              </span>
+              {commentsLoading && (
+                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+              )}
+              {commentsExpanded ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
+            {comments.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                <Checkbox
+                  checked={includeCommentsInAnalysis}
+                  onCheckedChange={setIncludeCommentsInAnalysis}
+                />
+                Include in AI analysis
+              </label>
+            )}
+          </div>
+
+          {commentsExpanded && (
+            <div className="mt-3">
+              {commentsError ? (
+                <p className="text-sm text-red-500">{commentsError}</p>
+              ) : comments.length === 0 && !commentsLoading ? (
+                <p className="text-sm text-muted-foreground italic">No comments yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {comments.map((comment) => (
+                    <CommentItem key={comment.id} comment={comment} />
+                  ))}
+
+                  {/* Load More Button */}
+                  {hasNextPage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={loadMore}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Load More Comments'
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Open in GitHub CTA */}
         <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
