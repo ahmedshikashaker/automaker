@@ -838,3 +838,9 @@ ipcMain.handle('window:updateMinWidth', (_, _sidebarExpanded: boolean) => {
   // Always use the smaller minimum width - horizontal scrolling handles any overflow
   mainWindow.setMinimumSize(MIN_WIDTH_COLLAPSED, MIN_HEIGHT);
 });
+
+// Quit the application (used when user denies sandbox risk confirmation)
+ipcMain.handle('app:quit', () => {
+  console.log('[Electron] Quitting application via IPC request');
+  app.quit();
+});

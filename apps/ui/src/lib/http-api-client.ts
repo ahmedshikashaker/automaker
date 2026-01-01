@@ -294,6 +294,32 @@ export const verifySession = async (): Promise<boolean> => {
   }
 };
 
+/**
+ * Check if the server is running in a containerized (sandbox) environment.
+ * This endpoint is unauthenticated so it can be checked before login.
+ */
+export const checkSandboxEnvironment = async (): Promise<{
+  isContainerized: boolean;
+  error?: string;
+}> => {
+  try {
+    const response = await fetch(`${getServerUrl()}/api/health/environment`, {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      console.warn('[HTTP Client] Failed to check sandbox environment');
+      return { isContainerized: false, error: 'Failed to check environment' };
+    }
+
+    const data = await response.json();
+    return { isContainerized: data.isContainerized ?? false };
+  } catch (error) {
+    console.error('[HTTP Client] Sandbox environment check failed:', error);
+    return { isContainerized: false, error: 'Network error' };
+  }
+};
+
 type EventType =
   | 'agent:stream'
   | 'auto-mode:event'
