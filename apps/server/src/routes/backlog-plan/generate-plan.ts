@@ -56,8 +56,11 @@ function parsePlanResponse(response: string): BacklogPlanResult {
 
   // If parsing fails, log details and return an empty result
   logger.warn('[BacklogPlan] Failed to parse AI response as JSON');
-  logger.debug('[BacklogPlan] Response text length:', response.length);
-  logger.debug('[BacklogPlan] Response preview:', response.slice(0, 500));
+  logger.warn('[BacklogPlan] Response text length:', response.length);
+  logger.warn('[BacklogPlan] Response preview:', response.slice(0, 500));
+  if (response.length === 0) {
+    logger.error('[BacklogPlan] Response text is EMPTY! No content was extracted from stream.');
+  }
   return {
     changes: [],
     summary: 'Failed to parse AI response',
@@ -150,9 +153,13 @@ export async function generateBacklogPlan(
         }
       } else if (msg.type === 'result' && msg.subtype === 'success' && msg.result) {
         // Use result if it's a final accumulated message (from Cursor provider)
+        logger.info('[BacklogPlan] Received result from Cursor, length:', msg.result.length);
+        logger.info('[BacklogPlan] Previous responseText length:', responseText.length);
         if (msg.result.length > responseText.length) {
-          logger.debug('[BacklogPlan] Received result from Cursor, length:', msg.result.length);
+          logger.info('[BacklogPlan] Using Cursor result (longer than accumulated text)');
           responseText = msg.result;
+        } else {
+          logger.info('[BacklogPlan] Keeping accumulated text (longer than Cursor result)');
         }
       }
     }
