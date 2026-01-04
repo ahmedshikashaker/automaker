@@ -610,6 +610,25 @@ export async function startServerAndWait({ serverPort, corsOriginEnv, npmArgs, c
   if (!serverReady) {
     log('Error: Server failed to start', 'red');
     console.log('Check logs/server.log for details');
+
+    // Clean up the spawned server process that failed health check
+    if (serverProcess && !serverProcess.killed && serverProcess.pid) {
+      log('Terminating failed server process...', 'yellow');
+      try {
+        await killProcessTree(serverProcess.pid);
+      } catch (killErr) {
+        // Fallback: try direct kill if tree-kill fails
+        try {
+          serverProcess.kill('SIGKILL');
+        } catch {
+          // Process may have already exited
+        }
+      }
+    }
+
+    // Close the log stream
+    logStream.end();
+
     return null;
   }
 

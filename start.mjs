@@ -161,7 +161,7 @@ async function main() {
       });
 
       if (!processes.server) {
-        cleanup();
+        await cleanup();
         process.exit(1);
       }
 
@@ -256,9 +256,13 @@ async function main() {
 }
 
 // Run main function
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(err);
   const cleanup = createCleanupHandler(processes);
-  cleanup();
+  try {
+    await cleanup();
+  } catch (cleanupErr) {
+    console.error('Cleanup error:', cleanupErr);
+  }
   process.exit(1);
 });
