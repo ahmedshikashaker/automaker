@@ -50,7 +50,6 @@ import {
   getEnableSandboxModeSetting,
   filterClaudeMdFromContext,
   getMCPServersFromSettings,
-
   getPromptCustomization,
 } from '../lib/settings-helpers.js';
 
