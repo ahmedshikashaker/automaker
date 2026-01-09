@@ -24,7 +24,7 @@ interface UseSettingsViewOptions {
   initialView?: SettingsViewId;
 }
 
-export function useSettingsView({ initialView = 'api-keys' }: UseSettingsViewOptions = {}) {
+export function useSettingsView({ initialView = 'model-defaults' }: UseSettingsViewOptions = {}) {
   const [activeView, setActiveView] = useState<SettingsViewId>(initialView);
 
   const navigateTo = useCallback((viewId: SettingsViewId) => {
