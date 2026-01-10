@@ -30,6 +30,20 @@ export type {
 } from './codex.js';
 export * from './codex-models.js';
 
+// Codex App-Server JSON-RPC types
+export type {
+  AppServerModelResponse,
+  AppServerModel,
+  AppServerReasoningEffort,
+  AppServerAccountResponse,
+  AppServerAccount,
+  AppServerRateLimitsResponse,
+  AppServerRateLimits,
+  AppServerRateLimitWindow,
+  JsonRpcRequest,
+  JsonRpcResponse,
+} from './codex-app-server.js';
+
 // Feature types
 export type {
   Feature,

@@ -73,6 +73,9 @@ blob-report/
 !.env.example
 !.env.local.example
 
+# Codex config (contains API keys)
+.codex/config.toml
+
 # TypeScript
 *.tsbuildinfo
 
