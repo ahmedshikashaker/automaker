@@ -13,6 +13,7 @@ import { getElectronAPI } from '@/lib/electron';
 import { useAppStore } from '@/store/app-store';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { XmlSyntaxEditor } from '@/components/ui/xml-syntax-editor';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -473,15 +474,12 @@ export function SpecPanel() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-2 overflow-hidden">
-        <Textarea
+      <div className="flex-1 overflow-hidden bg-muted/30 rounded-md m-2">
+        <XmlSyntaxEditor
           value={specContent}
-          onChange={(e) => setSpecContent(e.target.value)}
-          className={cn(
-            'h-full w-full resize-none font-mono text-xs',
-            'bg-muted/30 border-0 focus-visible:ring-1'
-          )}
+          onChange={(value) => setSpecContent(value)}
           placeholder="Enter your app specification..."
+          className="h-full"
         />
       </div>
 

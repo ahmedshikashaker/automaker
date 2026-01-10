@@ -8,6 +8,7 @@ import { Archive, Settings2, CheckSquare, GripVertical, Plus } from 'lucide-reac
 import { useResponsiveKanban } from '@/hooks/use-responsive-kanban';
 import { getColumnsWithPipeline, type ColumnId } from './constants';
 import type { PipelineConfig } from '@automaker/types';
+import { useDockState } from '@/components/layout/bottom-dock/bottom-dock';
 
 interface KanbanBoardProps {
   sensors: any;
@@ -95,8 +96,33 @@ export function KanbanBoard({
   // containerStyle handles centering and ensures columns fit without horizontal scroll in Electron
   const { columnWidth, containerStyle } = useResponsiveKanban(columns.length);
 
+  // Get dock state to add padding when dock is expanded on the side
+  const {
+    position: dockPosition,
+    isExpanded: dockExpanded,
+    isMaximized: dockMaximized,
+  } = useDockState();
+
+  // Calculate padding based on dock state
+  // Dock widths: collapsed=w-10 (2.5rem), expanded=w-96 (24rem), maximized=w-[50vw]
+  const getSideDockPadding = () => {
+    if (!dockExpanded) return undefined;
+    if (dockMaximized) return '50vw';
+    return '25rem'; // 24rem dock width + 1rem breathing room
+  };
+
+  const sideDockPadding = getSideDockPadding();
+
   return (
-    <div className="flex-1 overflow-x-auto px-5 pb-4 relative" style={backgroundImageStyle}>
+    <div
+      className="flex-1 overflow-x-auto px-5 pb-4 relative transition-[padding] duration-300"
+      style={{
+        ...backgroundImageStyle,
+        // Add padding when dock is expanded on the side so content can scroll past the overlay
+        paddingRight: dockPosition === 'right' ? sideDockPadding : undefined,
+        paddingLeft: dockPosition === 'left' ? sideDockPadding : undefined,
+      }}
+    >
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetectionStrategy}

@@ -1,18 +1,49 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { CircleDot, GitPullRequest, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
-import { getElectronAPI, GitHubIssue, GitHubPR } from '@/lib/electron';
+import {
+  CircleDot,
+  GitPullRequest,
+  RefreshCw,
+  ExternalLink,
+  Loader2,
+  Wand2,
+  CheckCircle,
+  Clock,
+  X,
+} from 'lucide-react';
+import {
+  getElectronAPI,
+  GitHubIssue,
+  GitHubPR,
+  IssueValidationResult,
+  StoredValidation,
+} from '@/lib/electron';
 import { useAppStore, GitHubCacheIssue, GitHubCachePR } from '@/store/app-store';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useIssueValidation } from '@/components/views/github-issues-view/hooks';
+import { ValidationDialog } from '@/components/views/github-issues-view/dialogs';
+import { useModelOverride } from '@/components/shared';
+import { toast } from 'sonner';
 
 type GitHubTab = 'issues' | 'prs';
 
 // Cache duration: 5 minutes
 const CACHE_DURATION_MS = 5 * 60 * 1000;
 
+// Check if validation is stale (> 24 hours)
+function isValidationStale(validatedAt: string): boolean {
+  const VALIDATION_CACHE_TTL_HOURS = 24;
+  const validatedTime = new Date(validatedAt).getTime();
+  const hoursSinceValidation = (Date.now() - validatedTime) / (1000 * 60 * 60);
+  return hoursSinceValidation > VALIDATION_CACHE_TTL_HOURS;
+}
+
 export function GitHubPanel() {
   const { currentProject, getGitHubCache, setGitHubCache, setGitHubCacheFetching } = useAppStore();
   const [activeTab, setActiveTab] = useState<GitHubTab>('issues');
+  const [selectedIssue, setSelectedIssue] = useState<GitHubIssue | null>(null);
+  const [validationResult, setValidationResult] = useState<IssueValidationResult | null>(null);
+  const [showValidationDialog, setShowValidationDialog] = useState(false);
   const fetchingRef = useRef(false);
 
   const projectPath = currentProject?.path || '';
@@ -23,6 +54,18 @@ export function GitHubPanel() {
   const isFetching = cache?.isFetching || false;
   const lastFetched = cache?.lastFetched || null;
   const hasCache = issues.length > 0 || prs.length > 0 || lastFetched !== null;
+
+  // Model override for validation
+  const validationModelOverride = useModelOverride({ phase: 'validationModel' });
+
+  // Use the issue validation hook
+  const { validatingIssues, cachedValidations, handleValidateIssue, handleViewCachedValidation } =
+    useIssueValidation({
+      selectedIssue,
+      showValidationDialog,
+      onValidationResultChange: setValidationResult,
+      onShowValidationDialogChange: setShowValidationDialog,
+    });
 
   const fetchData = useCallback(
     async (isBackgroundRefresh = false) => {
@@ -123,6 +166,61 @@ export function GitHubPanel() {
     api.openExternalLink(url);
   }, []);
 
+  // Handle validation for an issue (converts cache issue to GitHubIssue format)
+  const handleValidate = useCallback(
+    (cacheIssue: GitHubCacheIssue) => {
+      // Convert cache issue to GitHubIssue format for validation
+      const issue: GitHubIssue = {
+        number: cacheIssue.number,
+        title: cacheIssue.title,
+        url: cacheIssue.url,
+        author: cacheIssue.author || { login: 'unknown' },
+        state: 'OPEN',
+        body: '',
+        createdAt: new Date().toISOString(),
+        labels: [],
+        comments: { totalCount: 0 },
+      };
+      setSelectedIssue(issue);
+      handleValidateIssue(issue, {
+        modelEntry: validationModelOverride.effectiveModelEntry,
+      });
+    },
+    [handleValidateIssue, validationModelOverride.effectiveModelEntry]
+  );
+
+  // Handle viewing cached validation
+  const handleViewValidation = useCallback(
+    (cacheIssue: GitHubCacheIssue) => {
+      // Convert cache issue to GitHubIssue format
+      const issue: GitHubIssue = {
+        number: cacheIssue.number,
+        title: cacheIssue.title,
+        url: cacheIssue.url,
+        author: cacheIssue.author || { login: 'unknown' },
+        state: 'OPEN',
+        body: '',
+        createdAt: new Date().toISOString(),
+        labels: [],
+        comments: { totalCount: 0 },
+      };
+      setSelectedIssue(issue);
+      handleViewCachedValidation(issue);
+    },
+    [handleViewCachedValidation]
+  );
+
+  // Get validation status for an issue
+  const getValidationStatus = useCallback(
+    (issueNumber: number) => {
+      const isValidating = validatingIssues.has(issueNumber);
+      const cached = cachedValidations.get(issueNumber);
+      const isStale = cached ? isValidationStale(cached.validatedAt) : false;
+      return { isValidating, cached, isStale };
+    },
+    [validatingIssues, cachedValidations]
+  );
+
   // Only show loading spinner if no cached data AND fetching
   if (!hasCache && isFetching) {
     return (
@@ -180,22 +278,82 @@ export function GitHubPanel() {
             issues.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">No open issues</p>
             ) : (
-              issues.map((issue) => (
-                <div
-                  key={issue.number}
-                  className="flex items-start gap-2 p-2 rounded-md hover:bg-accent/50 cursor-pointer group"
-                  onClick={() => handleOpenInGitHub(issue.url)}
-                >
-                  <CircleDot className="h-3.5 w-3.5 mt-0.5 text-green-500 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">{issue.title}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      #{issue.number} opened by {issue.author?.login}
-                    </p>
+              issues.map((issue) => {
+                const { isValidating, cached, isStale } = getValidationStatus(issue.number);
+
+                return (
+                  <div
+                    key={issue.number}
+                    className="flex items-start gap-2 p-2 rounded-md hover:bg-accent/50 group"
+                  >
+                    <CircleDot className="h-3.5 w-3.5 mt-0.5 text-green-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{issue.title}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        #{issue.number} opened by {issue.author?.login}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* Validation status/action */}
+                      {isValidating ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      ) : cached && !isStale ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1.5"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewValidation(issue);
+                          }}
+                          title="View validation result"
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                        </Button>
+                      ) : cached && isStale ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1.5"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleValidate(issue);
+                          }}
+                          title="Re-validate (stale)"
+                        >
+                          <Clock className="h-3.5 w-3.5 text-yellow-500" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1.5 opacity-0 group-hover:opacity-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleValidate(issue);
+                          }}
+                          title="Validate with AI"
+                        >
+                          <Wand2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {/* Open in GitHub */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-1.5 opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenInGitHub(issue.url);
+                        }}
+                        title="Open in GitHub"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
-                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 text-muted-foreground" />
-                </div>
-              ))
+                );
+              })
             )
           ) : prs.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-4">No open pull requests</p>
@@ -219,6 +377,18 @@ export function GitHubPanel() {
           )}
         </div>
       </div>
+
+      {/* Validation Dialog */}
+      <ValidationDialog
+        open={showValidationDialog}
+        onOpenChange={setShowValidationDialog}
+        issue={selectedIssue}
+        validationResult={validationResult}
+        onConvertToTask={() => {
+          // Task conversion not supported in dock panel - need to go to full view
+          toast.info('Open GitHub Issues view for task conversion');
+        }}
+      />
     </div>
   );
 }

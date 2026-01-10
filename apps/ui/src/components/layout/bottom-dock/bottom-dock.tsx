@@ -1,6 +1,7 @@
 import { useState, useCallback, useSyncExternalStore, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/app-store';
+import { useKeyboardShortcuts, useKeyboardShortcutsConfig } from '@/hooks/use-keyboard-shortcuts';
 import { Button } from '@/components/ui/button';
 import {
   Terminal,
@@ -35,53 +36,76 @@ export type DockPosition = 'bottom' | 'right' | 'left';
 
 const DOCK_POSITION_STORAGE_KEY = 'automaker:dock-position';
 
-// Event emitter for dock position changes
-const positionListeners = new Set<() => void>();
+// Event emitter for dock state changes
+const stateListeners = new Set<() => void>();
 
-function emitPositionChange() {
-  positionListeners.forEach((listener) => listener());
+function emitStateChange() {
+  stateListeners.forEach((listener) => listener());
 }
 
-// Cached position to avoid creating new objects on every read
-let cachedPosition: DockPosition = 'bottom';
+// Cached dock state
+interface DockState {
+  position: DockPosition;
+  isExpanded: boolean;
+  isMaximized: boolean;
+}
 
-// Initialize from localStorage
+let cachedState: DockState = {
+  position: 'bottom',
+  isExpanded: false,
+  isMaximized: false,
+};
+
+// Initialize position from localStorage
 try {
   const stored = localStorage.getItem(DOCK_POSITION_STORAGE_KEY) as DockPosition | null;
   if (stored && ['bottom', 'right', 'left'].includes(stored)) {
-    cachedPosition = stored;
+    cachedState.position = stored;
   }
 } catch {
   // Ignore localStorage errors
 }
 
-function getPosition(): DockPosition {
-  return cachedPosition;
+function getDockState(): DockState {
+  return cachedState;
 }
 
 function updatePosition(position: DockPosition) {
-  if (cachedPosition !== position) {
-    cachedPosition = position;
+  if (cachedState.position !== position) {
+    cachedState = { ...cachedState, position };
     try {
       localStorage.setItem(DOCK_POSITION_STORAGE_KEY, position);
     } catch {
       // Ignore localStorage errors
     }
-    emitPositionChange();
+    emitStateChange();
   }
 }
 
-// Hook for external components to read dock position
-export function useDockState(): { position: DockPosition } {
-  const position = useSyncExternalStore(
+function updateExpanded(isExpanded: boolean) {
+  if (cachedState.isExpanded !== isExpanded) {
+    cachedState = { ...cachedState, isExpanded };
+    emitStateChange();
+  }
+}
+
+function updateMaximized(isMaximized: boolean) {
+  if (cachedState.isMaximized !== isMaximized) {
+    cachedState = { ...cachedState, isMaximized };
+    emitStateChange();
+  }
+}
+
+// Hook for external components to read dock state
+export function useDockState(): DockState {
+  return useSyncExternalStore(
     (callback) => {
-      positionListeners.add(callback);
-      return () => positionListeners.delete(callback);
+      stateListeners.add(callback);
+      return () => stateListeners.delete(callback);
     },
-    getPosition,
-    getPosition
+    getDockState,
+    getDockState
   );
-  return { position };
 }
 
 interface BottomDockProps {
@@ -98,12 +122,21 @@ export function BottomDock({ className }: BottomDockProps) {
   // Use external store for position - single source of truth
   const position = useSyncExternalStore(
     (callback) => {
-      positionListeners.add(callback);
-      return () => positionListeners.delete(callback);
+      stateListeners.add(callback);
+      return () => stateListeners.delete(callback);
     },
-    getPosition,
-    getPosition
+    () => getDockState().position,
+    () => getDockState().position
   );
+
+  // Sync local expanded/maximized state to external store for other components
+  useEffect(() => {
+    updateExpanded(isExpanded);
+  }, [isExpanded]);
+
+  useEffect(() => {
+    updateMaximized(isMaximized);
+  }, [isMaximized]);
 
   const autoModeState = currentProject ? getAutoModeState(currentProject.id) : null;
   const runningAgentsCount = autoModeState?.runningTasks?.length ?? 0;
@@ -138,6 +171,43 @@ export function BottomDock({ className }: BottomDockProps) {
     },
     [activeTab, isExpanded]
   );
+
+  // Get keyboard shortcuts from config
+  const shortcuts = useKeyboardShortcutsConfig();
+
+  // Register keyboard shortcuts for dock tabs
+  useKeyboardShortcuts([
+    {
+      key: shortcuts.terminal,
+      action: () => handleTabClick('terminal'),
+      description: 'Toggle Terminal panel',
+    },
+    {
+      key: shortcuts.ideation,
+      action: () => handleTabClick('ideation'),
+      description: 'Toggle Ideation panel',
+    },
+    {
+      key: shortcuts.spec,
+      action: () => handleTabClick('spec'),
+      description: 'Toggle Spec panel',
+    },
+    {
+      key: shortcuts.context,
+      action: () => handleTabClick('context'),
+      description: 'Toggle Context panel',
+    },
+    {
+      key: shortcuts.githubIssues,
+      action: () => handleTabClick('github'),
+      description: 'Toggle GitHub panel',
+    },
+    {
+      key: shortcuts.agent,
+      action: () => handleTabClick('agents'),
+      description: 'Toggle Agents panel',
+    },
+  ]);
 
   const handleDoubleClick = useCallback(() => {
     if (isExpanded) {
