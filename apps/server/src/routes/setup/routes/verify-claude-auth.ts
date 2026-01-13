@@ -1,6 +1,6 @@
 /**
  * POST /verify-claude-auth endpoint - Verify Claude authentication by running a test query
- * Supports verifying either CLI auth or API key auth independently
+ * Supports verifying CLI auth, API key auth, or settings file auth independently
  */
 
 import type { Request, Response } from 'express';
@@ -14,6 +14,7 @@ import {
   validateApiKey,
   createTempEnvOverride,
 } from '../../../lib/auth-utils.js';
+import { getSettingsEnv } from '../../../lib/claude-settings.js';
 
 const logger = createLogger('Setup');
 const rateLimiter = new AuthRateLimiter();
@@ -76,12 +77,25 @@ function containsAuthError(text: string): boolean {
   return AUTH_ERROR_PATTERNS.some((pattern) => lowerText.includes(pattern.toLowerCase()));
 }
 
+/**
+ * Get appropriate error message based on auth method
+ */
+function getAuthErrorMessage(authMethod?: 'cli' | 'api_key' | 'settings_file'): string {
+  const errorMessages = {
+    cli: "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.",
+    settings_file:
+      'Authentication from ~/.claude/settings.json failed. Please check that your authentication token is valid.',
+    api_key: 'API key is invalid or has been revoked.',
+  };
+  return errorMessages[authMethod || 'api_key'];
+}
+
 export function createVerifyClaudeAuthHandler() {
   return async (req: Request, res: Response): Promise<void> => {
     try {
       // Get the auth method and optional API key from the request body
       const { authMethod, apiKey } = req.body as {
-        authMethod?: 'cli' | 'api_key';
+        authMethod?: 'cli' | 'api_key' | 'settings_file';
         apiKey?: string;
       };
 
@@ -112,6 +126,7 @@ export function createVerifyClaudeAuthHandler() {
 
       // Create secure auth session
       const sessionId = `claude-auth-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      let cleanupEnv: (() => void) | undefined;
 
       try {
         // For API key verification, validate the key first
@@ -125,10 +140,37 @@ export function createVerifyClaudeAuthHandler() {
             });
             return;
           }
+        } else if (authMethod === 'settings_file') {
+          // For settings_file verification, check availability first
+          const settingsEnv = await getSettingsEnv();
+          if (!settingsEnv) {
+            res.json({
+              success: true,
+              authenticated: false,
+              error:
+                'No authentication token found in ~/.claude/settings.json. Please ensure the file exists and contains a valid authentication token.',
+            });
+            return;
+          }
+          logger.info('[Setup] Using env from ~/.claude/settings.json for verification', {
+            keys: Object.keys(settingsEnv),
+          });
         }
 
         // Create secure environment without modifying process.env
-        const authEnv = createSecureAuthEnv(authMethod || 'api_key', apiKey, 'anthropic');
+        const authEnv = createSecureAuthEnv((authMethod as any) || 'api_key', apiKey, 'anthropic');
+
+        // If settings_file, merge settings into authEnv
+        if (authMethod === 'settings_file') {
+          const settingsEnv = await getSettingsEnv();
+          if (settingsEnv) {
+            Object.assign(authEnv, settingsEnv);
+            // Map ANTHROPIC_AUTH_TOKEN to ANTHROPIC_API_KEY if present
+            if (settingsEnv.ANTHROPIC_AUTH_TOKEN && !settingsEnv.ANTHROPIC_API_KEY) {
+              authEnv.ANTHROPIC_API_KEY = settingsEnv.ANTHROPIC_AUTH_TOKEN;
+            }
+          }
+        }
 
         // For API key verification without provided key, use stored key or env var
         if (authMethod === 'api_key' && !apiKey) {
@@ -147,10 +189,10 @@ export function createVerifyClaudeAuthHandler() {
         }
 
         // Store the secure environment in session manager
-        AuthSessionManager.createSession(sessionId, authMethod || 'api_key', apiKey, 'anthropic');
+        AuthSessionManager.createSession(sessionId, (authMethod as any) || 'api_key', apiKey, 'anthropic');
 
         // Create temporary environment override for SDK call
-        const cleanupEnv = createTempEnvOverride(authEnv);
+        cleanupEnv = createTempEnvOverride(authEnv);
 
         // Run a minimal query to verify authentication
         const stream = query({
@@ -183,12 +225,7 @@ export function createVerifyClaudeAuthHandler() {
           // Check if any part of the message contains auth errors
           if (containsAuthError(msgStr)) {
             logger.error('[Setup] Found auth error in message');
-            if (authMethod === 'cli') {
-              errorMessage =
-                "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.";
-            } else {
-              errorMessage = 'API key is invalid or has been revoked.';
-            }
+            errorMessage = getAuthErrorMessage(authMethod);
             break;
           }
 
@@ -202,12 +239,7 @@ export function createVerifyClaudeAuthHandler() {
                   logger.info('[Setup] Assistant text:', text);
 
                   if (containsAuthError(text)) {
-                    if (authMethod === 'cli') {
-                      errorMessage =
-                        "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.";
-                    } else {
-                      errorMessage = 'API key is invalid or has been revoked.';
-                    }
+                    errorMessage = getAuthErrorMessage(authMethod);
                     break;
                   }
 
@@ -240,12 +272,7 @@ export function createVerifyClaudeAuthHandler() {
               authenticated = false;
               break;
             } else if (containsAuthError(resultStr)) {
-              if (authMethod === 'cli') {
-                errorMessage =
-                  "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.";
-              } else {
-                errorMessage = 'API key is invalid or has been revoked.';
-              }
+              errorMessage = getAuthErrorMessage(authMethod);
             } else {
               // Got a result without errors
               receivedAnyContent = true;
@@ -288,12 +315,7 @@ export function createVerifyClaudeAuthHandler() {
         }
         // Check for auth-related errors in exception
         else if (containsAuthError(errMessage)) {
-          if (authMethod === 'cli') {
-            errorMessage =
-              "CLI authentication failed. Please run 'claude login' in your terminal to authenticate.";
-          } else {
-            errorMessage = 'API key is invalid or has been revoked.';
-          }
+          errorMessage = getAuthErrorMessage(authMethod);
         } else if (errMessage.includes('abort') || errMessage.includes('timeout')) {
           errorMessage = 'Verification timed out. Please try again.';
         } else if (errMessage.includes('exit') && errMessage.includes('code 1')) {
@@ -310,9 +332,11 @@ export function createVerifyClaudeAuthHandler() {
         }
       } finally {
         clearTimeout(timeoutId);
+        if (cleanupEnv) cleanupEnv();
         // Clean up the auth session
         AuthSessionManager.destroySession(sessionId);
       }
+
 
       logger.info('[Setup] Verification result:', {
         authenticated,
