@@ -7,6 +7,7 @@ import type { Request, Response } from 'express';
 import type { GitHubComment, IssueCommentsResult } from '@automaker/types';
 import { execEnv, getErrorMessage, logError } from './common.js';
 import { checkGitHubRemote } from './check-github-remote.js';
+import { GithubAuthService } from '../../../services/github-auth-service.js';
 
 interface ListCommentsRequest {
   projectPath: string;
@@ -61,7 +62,8 @@ async function fetchIssueComments(
   owner: string,
   repo: string,
   issueNumber: number,
-  cursor?: string
+  cursor?: string,
+  token?: string
 ): Promise<IssueCommentsResult> {
   // Validate cursor format to prevent potential injection
   if (cursor && !isValidCursor(cursor)) {
@@ -104,9 +106,14 @@ async function fetchIssueComments(
   const requestBody = JSON.stringify({ query, variables });
 
   const response = await new Promise<GraphQLResponse>((resolve, reject) => {
+    const env = {
+      ...execEnv,
+      ...(token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {}),
+    };
+
     const gh = spawn('gh', ['api', 'graphql', '--input', '-'], {
       cwd: projectPath,
-      env: execEnv,
+      env,
     });
 
     // Add timeout to prevent hanging indefinitely
@@ -192,12 +199,17 @@ export function createListCommentsHandler() {
         return;
       }
 
+      // Get auth token for the project
+      const authService = GithubAuthService.getInstance();
+      const token = await authService.findTokenForPath(projectPath);
+
       const result = await fetchIssueComments(
         projectPath,
         remoteStatus.owner,
         remoteStatus.repo,
         issueNumber,
-        cursor
+        cursor,
+        token || undefined
       );
 
       res.json({

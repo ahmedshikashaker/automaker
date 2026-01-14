@@ -14,8 +14,19 @@ export function createBrowseHandler() {
     try {
       const { dirPath } = req.body as { dirPath?: string };
 
-      // Default to ALLOWED_ROOT_DIRECTORY if set, otherwise home directory
-      const defaultPath = getAllowedRootDirectory() || os.homedir();
+      // Default to ALLOWED_ROOT_DIRECTORY if set
+      let defaultPath = getAllowedRootDirectory();
+
+      if (!defaultPath) {
+        // If not restricted, try /host first (Docker mount), then homedir
+        try {
+          await secureFs.access('/host');
+          defaultPath = '/host';
+        } catch {
+          defaultPath = os.homedir();
+        }
+      }
+
       const targetPath = dirPath ? path.resolve(dirPath) : defaultPath;
 
       // Detect available drives on Windows

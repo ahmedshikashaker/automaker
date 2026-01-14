@@ -7,6 +7,7 @@ import type { Request, Response } from 'express';
 import { execAsync, execEnv, getErrorMessage, logError } from './common.js';
 import { checkGitHubRemote } from './check-github-remote.js';
 import { createLogger } from '@automaker/utils';
+import { GithubAuthService } from '../../../services/github-auth-service.js';
 
 const logger = createLogger('ListIssues');
 
@@ -59,7 +60,8 @@ async function fetchLinkedPRs(
   projectPath: string,
   owner: string,
   repo: string,
-  issueNumbers: number[]
+  issueNumbers: number[],
+  token?: string
 ): Promise<Map<number, LinkedPullRequest[]>> {
   const linkedPRsMap = new Map<number, LinkedPullRequest[]>();
 
@@ -117,9 +119,14 @@ async function fetchLinkedPRs(
       // --input - reads the JSON request body from stdin
       const requestBody = JSON.stringify({ query });
       const response = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const env = {
+          ...execEnv,
+          ...(token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {}),
+        };
+
         const gh = spawn('gh', ['api', 'graphql', '--input', '-'], {
           cwd: projectPath,
-          env: execEnv,
+          env,
         });
 
         let stdout = '';
@@ -212,20 +219,28 @@ export function createListIssuesHandler() {
         return;
       }
 
+      // Get auth token for the project
+      const authService = GithubAuthService.getInstance();
+      const token = await authService.findTokenForPath(projectPath);
+      const env = {
+        ...execEnv,
+        ...(token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {}),
+      };
+
       // Fetch open and closed issues in parallel (now including assignees)
       const [openResult, closedResult] = await Promise.all([
         execAsync(
           'gh issue list --state open --json number,title,state,author,createdAt,labels,url,body,assignees --limit 100',
           {
             cwd: projectPath,
-            env: execEnv,
+            env,
           }
         ),
         execAsync(
           'gh issue list --state closed --json number,title,state,author,createdAt,labels,url,body,assignees --limit 50',
           {
             cwd: projectPath,
-            env: execEnv,
+            env,
           }
         ),
       ]);
@@ -242,7 +257,8 @@ export function createListIssuesHandler() {
           projectPath,
           remoteStatus.owner,
           remoteStatus.repo,
-          openIssues.map((i) => i.number)
+          openIssues.map((i) => i.number),
+          token || undefined
         );
 
         // Attach linked PRs to issues

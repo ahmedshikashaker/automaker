@@ -10,6 +10,7 @@ import {
   execEnv,
   isValidBranchName,
   isGhCliAvailable,
+  getAuthEnv,
 } from '../common.js';
 import { createLogger } from '@automaker/utils';
 
@@ -76,6 +77,10 @@ export function createPRInfoHandler() {
         return;
       }
 
+      // Get auth environment
+      const authEnv = await getAuthEnv(worktreePath);
+      const env = { ...execEnv, ...authEnv };
+
       // Detect repository information (supports fork workflows)
       let upstreamRepo: string | null = null;
       let originOwner: string | null = null;
@@ -112,7 +117,7 @@ export function createPRInfoHandler() {
         try {
           const { stdout: originUrl } = await execAsync('git config --get remote.origin.url', {
             cwd: worktreePath,
-            env: execEnv,
+            env,
           });
           const match = originUrl.trim().match(/[:/]([^/]+)\/([^/\s]+?)(?:\.git)?$/);
           if (match) {
@@ -139,7 +144,7 @@ export function createPRInfoHandler() {
         const listCmd = `gh pr list${repoFlag} --head "${headRef}" --json number,title,url,state,author,body --limit 1`;
         const { stdout: prListOutput } = await execAsync(listCmd, {
           cwd: worktreePath,
-          env: execEnv,
+          env,
         });
 
         const prList = JSON.parse(prListOutput);
@@ -164,7 +169,7 @@ export function createPRInfoHandler() {
           const viewCmd = `gh pr view ${prNumber}${repoFlag} --json comments`;
           const { stdout: commentsOutput } = await execAsync(viewCmd, {
             cwd: worktreePath,
-            env: execEnv,
+            env,
           });
           const commentsData = JSON.parse(commentsOutput);
           comments = (commentsData.comments || []).map(
@@ -189,7 +194,7 @@ export function createPRInfoHandler() {
             const reviewsCmd = `gh api ${reviewsEndpoint}`;
             const { stdout: reviewsOutput } = await execAsync(reviewsCmd, {
               cwd: worktreePath,
-              env: execEnv,
+              env,
             });
             const reviewsData = JSON.parse(reviewsOutput);
             reviewComments = reviewsData.map(

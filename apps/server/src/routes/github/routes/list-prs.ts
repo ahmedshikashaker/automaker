@@ -5,6 +5,7 @@
 import type { Request, Response } from 'express';
 import { execAsync, execEnv, getErrorMessage, logError } from './common.js';
 import { checkGitHubRemote } from './check-github-remote.js';
+import { GithubAuthService } from '../../../services/github-auth-service.js';
 
 export interface GitHubLabel {
   name: string;
@@ -57,19 +58,27 @@ export function createListPRsHandler() {
         return;
       }
 
+      // Get auth token for the project
+      const authService = GithubAuthService.getInstance();
+      const token = await authService.findTokenForPath(projectPath);
+      const env = {
+        ...execEnv,
+        ...(token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {}),
+      };
+
       const [openResult, mergedResult] = await Promise.all([
         execAsync(
           'gh pr list --state open --json number,title,state,author,createdAt,labels,url,isDraft,headRefName,reviewDecision,mergeable,body --limit 100',
           {
             cwd: projectPath,
-            env: execEnv,
+            env,
           }
         ),
         execAsync(
           'gh pr list --state merged --json number,title,state,author,createdAt,labels,url,isDraft,headRefName,reviewDecision,mergeable,body --limit 50',
           {
             cwd: projectPath,
-            env: execEnv,
+            env,
           }
         ),
       ]);

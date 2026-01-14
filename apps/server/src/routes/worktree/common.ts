@@ -6,9 +6,15 @@ import { createLogger } from '@automaker/utils';
 import { spawnProcess } from '@automaker/platform';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { GithubAuthService } from '../../services/github-auth-service.js';
 import { getErrorMessage as getErrorMessageShared, createLogError } from '../common.js';
 
-const logger = createLogger('Worktree');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export const logger = createLogger('Worktree');
 export const execAsync = promisify(exec);
 
 // ============================================================================
@@ -16,11 +22,38 @@ export const execAsync = promisify(exec);
 // ============================================================================
 
 /**
+ * Get authentication environment variables for a given path.
+ * Checks for stored GitHub tokens and sets up GIT_ASKPASS/GH_TOKEN.
+ */
+export async function getAuthEnv(cwd: string): Promise<Record<string, string>> {
+  const authService = GithubAuthService.getInstance();
+  const token = await authService.findTokenForPath(cwd);
+
+  if (token) {
+    return createAuthEnv(token);
+  }
+
+  return {};
+}
+
+/**
+ * Create authentication environment variables for a specific token
+ */
+export function createAuthEnv(token: string): Record<string, string> {
+  return {
+    GITHUB_TOKEN: token, // Used by various tools
+    GH_TOKEN: token,     // Used by gh CLI
+    GIT_TERMINAL_PROMPT: '0', // Disable interactive prompts
+  };
+}
+
+/**
  * Execute git command with array arguments to prevent command injection.
  * Uses spawnProcess from @automaker/platform for secure, cross-platform execution.
  *
  * @param args - Array of git command arguments (e.g., ['worktree', 'add', path])
  * @param cwd - Working directory to execute the command in
+ * @param options - Optional execution options including env overrides and explicit token
  * @returns Promise resolving to stdout output
  * @throws Error with stderr message if command fails
  *
@@ -29,15 +62,31 @@ export const execAsync = promisify(exec);
  * // Safe: no injection possible
  * await execGitCommand(['branch', '-D', branchName], projectPath);
  *
- * // Instead of unsafe:
- * // await execAsync(`git branch -D ${branchName}`, { cwd });
+ * // Explicit token
+ * await execGitCommand(['clone', ...], parentPath, { token: 'ghp_...' });
  * ```
  */
-export async function execGitCommand(args: string[], cwd: string): Promise<string> {
+export async function execGitCommand(
+  args: string[],
+  cwd: string,
+  options: { env?: Record<string, string>; token?: string } = {}
+): Promise<string> {
+  // Get auth-specific env vars
+  // If explicit token provided, use it. Otherwise try to find one for the path.
+  const authEnv = options.token ? createAuthEnv(options.token) : await getAuthEnv(cwd);
+
+  // Merge with process.env (filtered for undefined) and optional env overrides
+  const env: Record<string, string> = {
+    ...process.env as Record<string, string>,
+    ...authEnv,
+    ...(options.env || {})
+  };
+
   const result = await spawnProcess({
     command: 'git',
     args,
     cwd,
+    env,
   });
 
   // spawnProcess returns { stdout, stderr, exitCode }

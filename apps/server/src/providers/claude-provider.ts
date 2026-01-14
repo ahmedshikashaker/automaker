@@ -152,8 +152,13 @@ export class ClaudeProvider extends BaseProvider {
       systemPrompt,
       maxTurns,
       cwd,
-      // Pass only explicitly allowed environment variables to SDK
-      env: buildEnv(),
+      // Pass environment variables to SDK, actively merging settingsEnv
+      env: {
+        ...buildEnv(),
+        ...(settingsEnv || {}),
+        // Ensure ANTHROPIC_API_KEY uses the final value (which might be from settings or memory)
+        ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
+      },
       // Pass through allowedTools if provided by caller (decided by sdk-options.ts)
       ...(allowedTools && { allowedTools }),
       // AUTONOMOUS MODE: Always bypass permissions for fully autonomous operation

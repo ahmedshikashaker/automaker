@@ -10,6 +10,7 @@ import { isMac } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { NewProjectModal } from '@/components/dialogs/new-project-modal';
+import { CloneProjectModal } from '@/components/dialogs/clone-project-modal';
 import { WorkspacePickerModal } from '@/components/dialogs/workspace-picker-modal';
 import type { StarterTemplate } from '@/lib/templates';
 import {
@@ -24,6 +25,7 @@ import {
   Settings,
   MoreVertical,
   Trash2,
+  Download,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -75,8 +77,10 @@ export function DashboardView() {
   } = useAppStore();
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showCloneModal, setShowCloneModal] = useState(false);
   const [showWorkspacePicker, setShowWorkspacePicker] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isCloning, setIsCloning] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
   const [projectToRemove, setProjectToRemove] = useState<{ id: string; name: string } | null>(null);
 
@@ -207,6 +211,12 @@ export function DashboardView() {
 
   const handleNewProject = () => {
     setShowNewProjectModal(true);
+  };
+
+  const handleCloneModal = (e?: any) => {
+    e?.preventDefault(); // Prevent dropdown from closing immediately if needed, though radis usually handles this.
+    logger.info('[Dashboard] Opening clone modal');
+    setShowCloneModal(true);
   };
 
   const handleInteractiveMode = () => {
@@ -459,6 +469,80 @@ export function DashboardView() {
     }
   };
 
+  const handleCloneProject = async (
+    repoUrl: string,
+    projectName: string,
+    parentPath: string,
+    token?: string
+  ) => {
+    setIsCloning(true);
+    try {
+      const httpClient = getHttpApiClient();
+      const api = getElectronAPI();
+
+      // Use the new worktree/clone endpoint which preserves .git
+      const cloneResult = await httpClient.worktree.clone(repoUrl, parentPath, projectName, token);
+
+      if (!cloneResult.success || !cloneResult.path) {
+        toast.error('Failed to clone repository', {
+          description: cloneResult.error || 'Unknown error occurred',
+        });
+        return;
+      }
+
+      const projectPath = cloneResult.path;
+      // Use the returned name or fallback to input
+      const finalName = cloneResult.name || projectName;
+
+      const initResult = await initializeProject(projectPath);
+      if (!initResult.success) {
+        toast.error('Failed to initialize project', {
+          description: initResult.error || 'Unknown error occurred',
+        });
+        return;
+      }
+
+      // Check if spec exists, if not create basic one
+      const specExists = await api.exists(`${projectPath}/.automaker/app_spec.txt`);
+      if (!specExists) {
+        await api.writeFile(
+          `${projectPath}/.automaker/app_spec.txt`,
+          `<project_specification>
+  <project_name>${finalName}</project_name>
+
+  <overview>
+    This project was cloned from ${repoUrl}.
+  </overview>
+</project_specification>`
+        );
+      }
+
+      const project = {
+        id: `project-${Date.now()}`,
+        name: finalName,
+        path: projectPath,
+        lastOpened: new Date().toISOString(),
+      };
+
+      addProject(project);
+      setCurrentProject(project);
+      setShowCloneModal(false);
+
+      toast.success('Project cloned successfully', {
+        description: `Cloned ${finalName}`,
+      });
+
+      navigate({ to: '/board' });
+    } catch (error) {
+      logger.error('Failed to clone project:', error);
+      toast.error('Failed to clone project', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
   const hasProjects = projects.length > 0;
 
   return (
@@ -603,6 +687,13 @@ export function DashboardView() {
                           <MessageSquare className="w-4 h-4 mr-2" />
                           Interactive Mode
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={handleCloneModal}
+                          data-testid="clone-project-option"
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Pull from GitHub
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -675,6 +766,10 @@ export function DashboardView() {
                       <DropdownMenuItem onClick={handleInteractiveMode}>
                         <MessageSquare className="w-4 h-4 mr-2" />
                         Interactive Mode
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={handleCloneModal}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Pull from GitHub
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -832,65 +927,72 @@ export function DashboardView() {
               )}
             </div>
           )}
+
+          {/* Modals */}
+          <NewProjectModal
+            open={showNewProjectModal}
+            onOpenChange={setShowNewProjectModal}
+            onCreateBlankProject={handleCreateBlankProject}
+            onCreateFromTemplate={handleCreateFromTemplate}
+            onCreateFromCustomUrl={handleCreateFromCustomUrl}
+            isCreating={isCreating}
+          />
+
+          <CloneProjectModal
+            open={showCloneModal}
+            onOpenChange={setShowCloneModal}
+            onClone={handleCloneProject}
+            isCloning={isCloning}
+          />
+
+          <WorkspacePickerModal
+            open={showWorkspacePicker}
+            onOpenChange={setShowWorkspacePicker}
+            onSelect={handleWorkspaceSelect}
+          />
+
+          {/* Remove project confirmation dialog */}
+          <Dialog open={!!projectToRemove} onOpenChange={(open) => !open && setProjectToRemove(null)}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Remove Project</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to remove <strong>{projectToRemove?.name}</strong> from
+                  Automaker?
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                <p className="text-sm text-muted-foreground">
+                  This will only remove the project from your Automaker projects list. The project files
+                  on your computer will not be deleted.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setProjectToRemove(null)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleConfirmRemove}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remove Project
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Loading overlay */}
+          {isOpening && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+              data-testid="project-opening-overlay"
+            >
+              <div className="flex flex-col items-center gap-4 p-8 rounded-2xl bg-card border border-border shadow-2xl">
+                <Loader2 className="w-10 h-10 text-brand-500 animate-spin" />
+                <p className="text-foreground font-medium">Opening project...</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Modals */}
-      <NewProjectModal
-        open={showNewProjectModal}
-        onOpenChange={setShowNewProjectModal}
-        onCreateBlankProject={handleCreateBlankProject}
-        onCreateFromTemplate={handleCreateFromTemplate}
-        onCreateFromCustomUrl={handleCreateFromCustomUrl}
-        isCreating={isCreating}
-      />
-
-      <WorkspacePickerModal
-        open={showWorkspacePicker}
-        onOpenChange={setShowWorkspacePicker}
-        onSelect={handleWorkspaceSelect}
-      />
-
-      {/* Remove project confirmation dialog */}
-      <Dialog open={!!projectToRemove} onOpenChange={(open) => !open && setProjectToRemove(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remove Project</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to remove <strong>{projectToRemove?.name}</strong> from
-              Automaker?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              This will only remove the project from your Automaker projects list. The project files
-              on your computer will not be deleted.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setProjectToRemove(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleConfirmRemove}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Remove Project
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Loading overlay */}
-      {isOpening && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
-          data-testid="project-opening-overlay"
-        >
-          <div className="flex flex-col items-center gap-4 p-8 rounded-2xl bg-card border border-border shadow-2xl">
-            <Loader2 className="w-10 h-10 text-brand-500 animate-spin" />
-            <p className="text-foreground font-medium">Opening project...</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

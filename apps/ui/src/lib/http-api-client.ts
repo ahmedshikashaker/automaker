@@ -71,7 +71,7 @@ const handleUnauthorized = (): void => {
     credentials: 'include',
     body: '{}',
     cache: NO_STORE_CACHE_MODE,
-  }).catch(() => {});
+  }).catch(() => { });
   notifyLoggedOut();
 };
 
@@ -1535,38 +1535,38 @@ export class HttpApiClient implements ElectronAPI {
       error?: string;
     }>;
   } = {
-    getAll: (projectPath: string) => this.post('/api/features/list', { projectPath }),
-    get: (projectPath: string, featureId: string) =>
-      this.post('/api/features/get', { projectPath, featureId }),
-    create: (projectPath: string, feature: Feature) =>
-      this.post('/api/features/create', { projectPath, feature }),
-    update: (
-      projectPath: string,
-      featureId: string,
-      updates: Partial<Feature>,
-      descriptionHistorySource?: 'enhance' | 'edit',
-      enhancementMode?: 'improve' | 'technical' | 'simplify' | 'acceptance' | 'ux-reviewer',
-      preEnhancementDescription?: string
-    ) =>
-      this.post('/api/features/update', {
-        projectPath,
-        featureId,
-        updates,
-        descriptionHistorySource,
-        enhancementMode,
-        preEnhancementDescription,
-      }),
-    delete: (projectPath: string, featureId: string) =>
-      this.post('/api/features/delete', { projectPath, featureId }),
-    getAgentOutput: (projectPath: string, featureId: string) =>
-      this.post('/api/features/agent-output', { projectPath, featureId }),
-    generateTitle: (description: string) =>
-      this.post('/api/features/generate-title', { description }),
-    bulkUpdate: (projectPath: string, featureIds: string[], updates: Partial<Feature>) =>
-      this.post('/api/features/bulk-update', { projectPath, featureIds, updates }),
-    bulkDelete: (projectPath: string, featureIds: string[]) =>
-      this.post('/api/features/bulk-delete', { projectPath, featureIds }),
-  };
+      getAll: (projectPath: string) => this.post('/api/features/list', { projectPath }),
+      get: (projectPath: string, featureId: string) =>
+        this.post('/api/features/get', { projectPath, featureId }),
+      create: (projectPath: string, feature: Feature) =>
+        this.post('/api/features/create', { projectPath, feature }),
+      update: (
+        projectPath: string,
+        featureId: string,
+        updates: Partial<Feature>,
+        descriptionHistorySource?: 'enhance' | 'edit',
+        enhancementMode?: 'improve' | 'technical' | 'simplify' | 'acceptance' | 'ux-reviewer',
+        preEnhancementDescription?: string
+      ) =>
+        this.post('/api/features/update', {
+          projectPath,
+          featureId,
+          updates,
+          descriptionHistorySource,
+          enhancementMode,
+          preEnhancementDescription,
+        }),
+      delete: (projectPath: string, featureId: string) =>
+        this.post('/api/features/delete', { projectPath, featureId }),
+      getAgentOutput: (projectPath: string, featureId: string) =>
+        this.post('/api/features/agent-output', { projectPath, featureId }),
+      generateTitle: (description: string) =>
+        this.post('/api/features/generate-title', { description }),
+      bulkUpdate: (projectPath: string, featureIds: string[], updates: Partial<Feature>) =>
+        this.post('/api/features/bulk-update', { projectPath, featureIds, updates }),
+      bulkDelete: (projectPath: string, featureIds: string[]) =>
+        this.post('/api/features/bulk-delete', { projectPath, featureIds }),
+    };
 
   // Auto Mode API
   autoMode: AutoModeAPI = {
@@ -1658,6 +1658,8 @@ export class HttpApiClient implements ElectronAPI {
 
   // Worktree API
   worktree: WorktreeAPI = {
+    clone: (repoUrl: string, parentPath: string, projectName: string, token?: string) =>
+      this.post('/api/worktree/clone', { repoUrl, parentPath, projectName, token }),
     mergeFeature: (projectPath: string, featureId: string, options?: object) =>
       this.post('/api/worktree/merge', { projectPath, featureId, options }),
     getInfo: (projectPath: string, featureId: string) =>

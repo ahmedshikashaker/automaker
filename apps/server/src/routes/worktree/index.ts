@@ -39,6 +39,7 @@ import {
   createDeleteInitScriptHandler,
   createRunInitScriptHandler,
 } from './routes/init-script.js';
+import { createCloneHandler } from './routes/clone.js';
 
 export function createWorktreeRoutes(events: EventEmitter): Router {
   const router = Router();
@@ -107,6 +108,8 @@ export function createWorktreeRoutes(events: EventEmitter): Router {
     validatePathParams('projectPath', 'worktreePath'),
     createRunInitScriptHandler(events)
   );
+
+  router.post('/clone', createCloneHandler());
 
   return router;
 }

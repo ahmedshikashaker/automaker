@@ -17,6 +17,11 @@ import {
   createDeleteValidationHandler,
   createMarkViewedHandler,
 } from './routes/validation-endpoints.js';
+import {
+  createSetAuthHandler,
+  createGetAuthHandler,
+  createRemoveAuthHandler
+} from './routes/auth.js';
 import type { SettingsService } from '../../services/settings-service.js';
 
 export function createGitHubRoutes(
@@ -53,6 +58,11 @@ export function createGitHubRoutes(
     validatePathParams('projectPath'),
     createMarkViewedHandler(events)
   );
+
+  // Auth endpoints
+  router.post('/auth', createSetAuthHandler());
+  router.get('/auth', createGetAuthHandler());
+  router.delete('/auth', createRemoveAuthHandler());
 
   return router;
 }

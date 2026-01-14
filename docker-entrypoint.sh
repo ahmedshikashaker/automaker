@@ -41,5 +41,55 @@ EOF
     chown -R automaker:automaker /home/automaker/.config
 fi
 
+# Update/Create Claude settings using Node.js for safe JSON handling
+node -e '
+const fs = require("fs");
+const targetPath = "/home/automaker/.claude/settings.json";
+
+// Map of env vars to settings.json env keys
+const envMap = {
+  "ANTHROPIC_AUTH_TOKEN": "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_BASE_URL": "ANTHROPIC_BASE_URL",
+  "API_TIMEOUT_MS": "API_TIMEOUT_MS",
+  "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+};
+
+let settings = {};
+if (fs.existsSync(targetPath)) {
+  try {
+    settings = JSON.parse(fs.readFileSync(targetPath, "utf8"));
+  } catch (e) {
+    console.error("Failed to parse existing settings.json, starting fresh");
+  }
+}
+
+if (!settings.env) settings.env = {};
+
+let updated = false;
+for (const [envVar, jsonKey] of Object.entries(envMap)) {
+  if (process.env[envVar]) {
+    settings.env[jsonKey] = process.env[envVar];
+    updated = true;
+  }
+}
+
+// Only write if we have something to write (updated or new file)
+// Check if file exists to decide if we need to forcefully create it even if not updated (in case of empty map but logic required)
+// But here we rely on "updated". If file exists and no updates, we do nothing.
+// If file does NOT exist and we have updates, we write.
+if (updated) {
+  // Ensure directory exists
+  const dir = require("path").dirname(targetPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  
+  fs.writeFileSync(targetPath, JSON.stringify(settings, null, 2));
+  fs.chmodSync(targetPath, 0o600);
+}
+'
+
+# Ensure the automaker user owns the settings file and directory
+# This is critical because the node script above runs as root
+chown -R automaker:automaker /home/automaker/.claude
+
 # Switch to automaker user and execute the command
 exec gosu automaker "$@"

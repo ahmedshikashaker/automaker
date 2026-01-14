@@ -189,7 +189,12 @@ export function createVerifyClaudeAuthHandler() {
         }
 
         // Store the secure environment in session manager
-        AuthSessionManager.createSession(sessionId, (authMethod as any) || 'api_key', apiKey, 'anthropic');
+        AuthSessionManager.createSession(
+          sessionId,
+          (authMethod as any) || 'api_key',
+          apiKey,
+          'anthropic'
+        );
 
         // Create temporary environment override for SDK call
         cleanupEnv = createTempEnvOverride(authEnv);
@@ -336,7 +341,6 @@ export function createVerifyClaudeAuthHandler() {
         // Clean up the auth session
         AuthSessionManager.destroySession(sessionId);
       }
-
 
       logger.info('[Setup] Verification result:', {
         authenticated,

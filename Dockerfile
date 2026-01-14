@@ -65,9 +65,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && GH_VERSION="2.63.2" \
     && ARCH=$(uname -m) \
     && case "$ARCH" in \
-        x86_64) GH_ARCH="amd64" ;; \
-        aarch64|arm64) GH_ARCH="arm64" ;; \
-        *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
+    x86_64) GH_ARCH="amd64" ;; \
+    aarch64|arm64) GH_ARCH="arm64" ;; \
+    *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
     esac \
     && curl -L "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz" -o gh.tar.gz \
     && tar -xzf gh.tar.gz \
@@ -131,7 +131,10 @@ RUN mkdir -p /data /projects && chown automaker:automaker /data /projects
 # Use --system so it's not overwritten by mounted user .gitconfig
 RUN git config --system --add safe.directory '*' && \
     # Use gh as credential helper (works with GH_TOKEN env var)
-    git config --system credential.helper '!gh auth git-credential'
+    git config --system credential.helper '!gh auth git-credential' && \
+    # Set default git identity for commits
+    git config --system user.name 'Automaker' && \
+    git config --system user.email 'automaker@hamzahllc.com'
 
 # Copy entrypoint script for fixing permissions on mounted volumes
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

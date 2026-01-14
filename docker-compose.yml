@@ -32,9 +32,15 @@ services:
     restart: unless-stopped
     ports:
       - '3008:3008'
+    env_file:
+      - .env
     environment:
       # Required
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - API_TIMEOUT_MS=${API_TIMEOUT_MS:-}
+      - CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
 
       # Optional - Claude CLI OAuth credentials (for macOS users)
       # Extract with: ./scripts/get-claude-token.sh
@@ -54,7 +60,7 @@ services:
       # Projects and files can only be created/accessed within this directory
       # Paths are INSIDE the container, not on your host
       # Default: /projects
-      - ALLOWED_ROOT_DIRECTORY=${ALLOWED_ROOT_DIRECTORY:-/projects}
+      - ALLOWED_ROOT_DIRECTORY=${ALLOWED_ROOT_DIRECTORY:-}
 
       # Optional - data directory for sessions, settings, etc. (container-only)
       - DATA_DIR=/data
@@ -69,6 +75,9 @@ services:
       # ONLY named volumes - these are isolated from your host filesystem
       # This volume persists data between restarts but is container-managed
       - automaker-data:/data
+      # Mount host directory to /host in container
+      # This allows browsing and editing files on your host machine
+      - ${HOST_DIR:-.}:/host
 
       # Persist Claude CLI OAuth session keys across container restarts
       # This allows 'claude login' authentication to persist between restarts
@@ -77,15 +86,14 @@ services:
       # Persist Cursor CLI configuration and authentication across container restarts
       # This allows 'cursor-agent login' authentication to persist between restarts
       - automaker-cursor-config:/home/automaker/.cursor
-
       # NO host directory mounts - container cannot access your laptop files
       # If you need to work on a project, create it INSIDE the container
       # or use a separate docker-compose override file
 
-    # Security: Server runs as non-root user (already set in Dockerfile)
-    # Security: No privileged mode
-    # Security: No host network access
-    # Security: No host filesystem mounts
+      # Security: Server runs as non-root user (already set in Dockerfile)
+      # Security: No privileged mode
+      # Security: No host network access
+      # Security: No host filesystem mounts
 
 volumes:
   automaker-data:
