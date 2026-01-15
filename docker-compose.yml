@@ -4,7 +4,7 @@
 #
 # Usage:
 #   docker-compose up -d
-#   Then open http://localhost:3007
+#   Then open http://localhost:9000
 #
 # See docs/docker-isolation.md for full documentation.
 
@@ -18,7 +18,7 @@ services:
     container_name: automaker-ui
     restart: unless-stopped
     ports:
-      - '3007:80'
+      - '9000:80'
     depends_on:
       - server
 
@@ -66,7 +66,7 @@ services:
       - DATA_DIR=/data
 
       # Optional - CORS origin (default allows all)
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3007}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:9000}
 
       # Internal - indicates the API is running in a containerized sandbox environment
       # This is used by the UI to determine if sandbox risk warnings should be shown
