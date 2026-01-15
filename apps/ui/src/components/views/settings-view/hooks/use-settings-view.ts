@@ -19,8 +19,7 @@ export type SettingsViewId =
   | 'worktrees'
   | 'account'
   | 'security'
-  | 'danger'
-  | 'project-auth';
+  | 'danger';
 
 interface UseSettingsViewOptions {
   initialView?: SettingsViewId;

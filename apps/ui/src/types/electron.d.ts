@@ -28,35 +28,35 @@ export interface ToolUse {
 
 export type StreamEvent =
   | {
-      type: 'message';
-      sessionId: string;
-      message: Message;
-    }
+    type: 'message';
+    sessionId: string;
+    message: Message;
+  }
   | {
-      type: 'stream';
-      sessionId: string;
-      messageId: string;
-      content: string;
-      isComplete: boolean;
-    }
+    type: 'stream';
+    sessionId: string;
+    messageId: string;
+    content: string;
+    isComplete: boolean;
+  }
   | {
-      type: 'tool_use';
-      sessionId: string;
-      tool: ToolUse;
-    }
+    type: 'tool_use';
+    sessionId: string;
+    tool: ToolUse;
+  }
   | {
-      type: 'complete';
-      sessionId: string;
-      messageId?: string;
-      content: string;
-      toolUses: ToolUse[];
-    }
+    type: 'complete';
+    sessionId: string;
+    messageId?: string;
+    content: string;
+    toolUses: ToolUse[];
+  }
   | {
-      type: 'error';
-      sessionId: string;
-      error: string;
-      message?: Message;
-    };
+    type: 'error';
+    sessionId: string;
+    error: string;
+    message?: Message;
+  };
 
 export interface SessionListItem {
   id: string;
@@ -164,177 +164,177 @@ export interface SessionsAPI {
 
 export type AutoModeEvent =
   | {
-      type: 'auto_mode_feature_start';
-      featureId: string;
-      projectId?: string;
-      projectPath?: string;
-      feature: unknown;
-    }
+    type: 'auto_mode_feature_start';
+    featureId: string;
+    projectId?: string;
+    projectPath?: string;
+    feature: unknown;
+  }
   | {
-      type: 'auto_mode_progress';
-      featureId: string;
-      projectId?: string;
-      projectPath?: string;
-      content: string;
-    }
+    type: 'auto_mode_progress';
+    featureId: string;
+    projectId?: string;
+    projectPath?: string;
+    content: string;
+  }
   | {
-      type: 'auto_mode_tool';
-      featureId: string;
-      projectId?: string;
-      projectPath?: string;
-      tool: string;
-      input: unknown;
-    }
+    type: 'auto_mode_tool';
+    featureId: string;
+    projectId?: string;
+    projectPath?: string;
+    tool: string;
+    input: unknown;
+  }
   | {
-      type: 'auto_mode_feature_complete';
-      featureId: string;
-      projectId?: string;
-      projectPath?: string;
-      passes: boolean;
-      message: string;
-    }
+    type: 'auto_mode_feature_complete';
+    featureId: string;
+    projectId?: string;
+    projectPath?: string;
+    passes: boolean;
+    message: string;
+  }
   | {
-      type: 'pipeline_step_started';
-      featureId: string;
-      projectPath?: string;
-      stepId: string;
-      stepName: string;
-      stepIndex: number;
-      totalSteps: number;
-    }
+    type: 'pipeline_step_started';
+    featureId: string;
+    projectPath?: string;
+    stepId: string;
+    stepName: string;
+    stepIndex: number;
+    totalSteps: number;
+  }
   | {
-      type: 'pipeline_step_complete';
-      featureId: string;
-      projectPath?: string;
-      stepId: string;
-      stepName: string;
-      stepIndex: number;
-      totalSteps: number;
-    }
+    type: 'pipeline_step_complete';
+    featureId: string;
+    projectPath?: string;
+    stepId: string;
+    stepName: string;
+    stepIndex: number;
+    totalSteps: number;
+  }
   | {
-      type: 'auto_mode_error';
-      error: string;
-      errorType?: 'authentication' | 'cancellation' | 'abort' | 'execution';
-      featureId?: string;
-      projectId?: string;
-      projectPath?: string;
-    }
+    type: 'auto_mode_error';
+    error: string;
+    errorType?: 'authentication' | 'cancellation' | 'abort' | 'execution';
+    featureId?: string;
+    projectId?: string;
+    projectPath?: string;
+  }
   | {
-      type: 'auto_mode_phase';
-      featureId: string;
-      projectId?: string;
-      projectPath?: string;
-      phase: 'planning' | 'action' | 'verification';
-      message: string;
-    }
+    type: 'auto_mode_phase';
+    featureId: string;
+    projectId?: string;
+    projectPath?: string;
+    phase: 'planning' | 'action' | 'verification';
+    message: string;
+  }
   | {
-      type: 'auto_mode_ultrathink_preparation';
-      featureId: string;
-      projectPath?: string;
-      warnings: string[];
-      recommendations: string[];
-      estimatedCost?: number;
-      estimatedTime?: string;
-    }
+    type: 'auto_mode_ultrathink_preparation';
+    featureId: string;
+    projectPath?: string;
+    warnings: string[];
+    recommendations: string[];
+    estimatedCost?: number;
+    estimatedTime?: string;
+  }
   | {
-      type: 'plan_approval_required';
-      featureId: string;
-      projectPath?: string;
-      planContent: string;
-      planningMode: 'lite' | 'spec' | 'full';
-      planVersion?: number;
-    }
+    type: 'plan_approval_required';
+    featureId: string;
+    projectPath?: string;
+    planContent: string;
+    planningMode: 'lite' | 'spec' | 'full';
+    planVersion?: number;
+  }
   | {
-      type: 'plan_auto_approved';
-      featureId: string;
-      projectPath?: string;
-      planContent: string;
-      planningMode: 'lite' | 'spec' | 'full';
-    }
+    type: 'plan_auto_approved';
+    featureId: string;
+    projectPath?: string;
+    planContent: string;
+    planningMode: 'lite' | 'spec' | 'full';
+  }
   | {
-      type: 'plan_approved';
-      featureId: string;
-      projectPath?: string;
-      hasEdits: boolean;
-      planVersion?: number;
-    }
+    type: 'plan_approved';
+    featureId: string;
+    projectPath?: string;
+    hasEdits: boolean;
+    planVersion?: number;
+  }
   | {
-      type: 'plan_rejected';
-      featureId: string;
-      projectPath?: string;
-      feedback?: string;
-    }
+    type: 'plan_rejected';
+    featureId: string;
+    projectPath?: string;
+    feedback?: string;
+  }
   | {
-      type: 'plan_revision_requested';
-      featureId: string;
-      projectPath?: string;
-      feedback?: string;
-      hasEdits?: boolean;
-      planVersion?: number;
-    }
+    type: 'plan_revision_requested';
+    featureId: string;
+    projectPath?: string;
+    feedback?: string;
+    hasEdits?: boolean;
+    planVersion?: number;
+  }
   | {
-      type: 'planning_started';
-      featureId: string;
-      mode: 'lite' | 'spec' | 'full';
-      message: string;
-    }
+    type: 'planning_started';
+    featureId: string;
+    mode: 'lite' | 'spec' | 'full';
+    message: string;
+  }
   | {
-      type: 'auto_mode_task_started';
-      featureId: string;
-      projectPath?: string;
-      taskId: string;
-      taskDescription: string;
-      taskIndex: number;
-      tasksTotal: number;
-    }
+    type: 'auto_mode_task_started';
+    featureId: string;
+    projectPath?: string;
+    taskId: string;
+    taskDescription: string;
+    taskIndex: number;
+    tasksTotal: number;
+  }
   | {
-      type: 'auto_mode_task_complete';
-      featureId: string;
-      projectPath?: string;
-      taskId: string;
-      tasksCompleted: number;
-      tasksTotal: number;
-    }
+    type: 'auto_mode_task_complete';
+    featureId: string;
+    projectPath?: string;
+    taskId: string;
+    tasksCompleted: number;
+    tasksTotal: number;
+  }
   | {
-      type: 'auto_mode_phase_complete';
-      featureId: string;
-      projectPath?: string;
-      phaseNumber: number;
-    }
+    type: 'auto_mode_phase_complete';
+    featureId: string;
+    projectPath?: string;
+    phaseNumber: number;
+  }
   | {
-      type: 'auto_mode_resuming_features';
-      message: string;
-      projectPath?: string;
-      featureIds: string[];
-      features: Array<{
-        id: string;
-        title?: string;
-        status?: string;
-      }>;
-    };
+    type: 'auto_mode_resuming_features';
+    message: string;
+    projectPath?: string;
+    featureIds: string[];
+    features: Array<{
+      id: string;
+      title?: string;
+      status?: string;
+    }>;
+  };
 
 export type SpecRegenerationEvent =
   | {
-      type: 'spec_regeneration_progress';
-      content: string;
-      projectPath: string;
-    }
+    type: 'spec_regeneration_progress';
+    content: string;
+    projectPath: string;
+  }
   | {
-      type: 'spec_regeneration_tool';
-      tool: string;
-      input: unknown;
-      projectPath: string;
-    }
+    type: 'spec_regeneration_tool';
+    tool: string;
+    input: unknown;
+    projectPath: string;
+  }
   | {
-      type: 'spec_regeneration_complete';
-      message: string;
-      projectPath: string;
-    }
+    type: 'spec_regeneration_complete';
+    message: string;
+    projectPath: string;
+  }
   | {
-      type: 'spec_regeneration_error';
-      error: string;
-      projectPath: string;
-    };
+    type: 'spec_regeneration_error';
+    error: string;
+    projectPath: string;
+  };
 
 export interface SpecRegenerationAPI {
   create: (
@@ -617,9 +617,6 @@ export interface ElectronAPI {
 
   // Git Operations APIs (for non-worktree operations)
   git: GitAPI;
-
-  // GitHub API
-  github: GitHubAPI;
 
   // Spec Regeneration APIs
   specRegeneration: SpecRegenerationAPI;
@@ -1016,23 +1013,23 @@ export interface WorktreeAPI {
     callback: (
       event:
         | {
-            type: 'dev-server:started';
-            payload: { worktreePath: string; port: number; url: string; timestamp: string };
-          }
+          type: 'dev-server:started';
+          payload: { worktreePath: string; port: number; url: string; timestamp: string };
+        }
         | {
-            type: 'dev-server:output';
-            payload: { worktreePath: string; content: string; timestamp: string };
-          }
+          type: 'dev-server:output';
+          payload: { worktreePath: string; content: string; timestamp: string };
+        }
         | {
-            type: 'dev-server:stopped';
-            payload: {
-              worktreePath: string;
-              port: number;
-              exitCode: number | null;
-              error?: string;
-              timestamp: string;
-            };
-          }
+          type: 'dev-server:stopped';
+          payload: {
+            worktreePath: string;
+            port: number;
+            exitCode: number | null;
+            error?: string;
+            timestamp: string;
+          };
+        }
     ) => void
   ) => () => void;
 
@@ -1153,34 +1150,6 @@ export interface ProviderStatus {
   };
 }
 
-export interface GitHubAPI {
-  getIssueComments: (
-    projectPath: string,
-    issueNumber: number,
-    cursor?: string
-  ) => Promise<{
-    success: boolean;
-    data?: any;
-    error?: string;
-  }>;
-  setAuth: (
-    projectPath: string,
-    token: string
-  ) => Promise<{
-    success: boolean;
-    error?: string;
-  }>;
-  getAuth: (projectPath: string) => Promise<{
-    success: boolean;
-    hasToken?: boolean;
-    error?: string;
-  }>;
-  removeAuth: (projectPath: string) => Promise<{
-    success: boolean;
-    error?: string;
-  }>;
-}
-
 declare global {
   interface Window {
     electronAPI: ElectronAPI;
@@ -1188,4 +1157,4 @@ declare global {
   }
 }
 
-export {};
+export { };
