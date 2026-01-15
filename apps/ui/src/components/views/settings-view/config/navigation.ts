@@ -79,6 +79,7 @@ export const GLOBAL_NAV_ITEMS: NavigationItem[] = GLOBAL_NAV_GROUPS.flatMap((gro
 
 // Project-specific settings - only visible when a project is selected
 export const PROJECT_NAV_ITEMS: NavigationItem[] = [
+  { id: 'project-auth', label: 'Authentication', icon: Shield },
   { id: 'danger', label: 'Danger Zone', icon: Trash2 },
 ];
 

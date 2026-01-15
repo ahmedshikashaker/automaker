@@ -280,9 +280,18 @@ export class AgentService {
         try {
           // Check project settings first
           const projectSettings = await this.settingsService.getProjectSettings(effectiveWorkDir);
+          this.logger.info(`[Debug] Loading project settings for ${effectiveWorkDir}`, {
+            hasSettings: !!projectSettings,
+            apiKeys: projectSettings?.apiKeys,
+          });
+
           if (projectSettings.apiKeys?.anthropic) {
             apiKeyOverride = projectSettings.apiKeys.anthropic;
-            this.logger.info(`Using project-specific Anthropic API key for ${sessionId}`);
+            this.logger.info(
+              `[Debug] Found project-specific Anthropic API key override via settings`
+            );
+          } else {
+            this.logger.info(`[Debug] No Anthropic API key found in project settings`);
           }
         } catch (error) {
           this.logger.warn('Failed to check project settings for API key:', error);
@@ -412,6 +421,12 @@ export class AgentService {
         reasoningEffort: effectiveReasoningEffort, // Pass reasoning effort for Codex models
         apiKey: apiKeyOverride, // Pass project-specific API key if found
       };
+
+      this.logger.info(`[Debug] Final execution options for provider`, {
+        hasApiKey: !!options.apiKey,
+        apiKeyLength: options.apiKey?.length,
+        model: options.model,
+      });
 
       // Build prompt content with images
       const { content: promptContent } = await buildPromptWithImages(

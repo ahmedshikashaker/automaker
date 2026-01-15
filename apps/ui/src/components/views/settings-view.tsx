@@ -1,3 +1,4 @@
+import { ProjectAuthSection } from './settings-view/project-auth/project-auth-section';
 import { useState, useEffect } from 'react';
 import { useSearch } from '@tanstack/react-router';
 import { useAppStore } from '@/store/app-store';
@@ -222,6 +223,8 @@ export function SettingsView() {
             onDeleteClick={() => setShowDeleteDialog(true)}
           />
         );
+      case 'project-auth':
+        return <ProjectAuthSection />;
       default:
         return <ApiKeysSection />;
     }

@@ -367,6 +367,22 @@ export interface GitHubAPI {
     endCursor?: string;
     error?: string;
   }>;
+  setAuth: (
+    projectPath: string,
+    token: string
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  getAuth: (projectPath: string) => Promise<{
+    success: boolean;
+    hasToken?: boolean;
+    error?: string;
+  }>;
+  removeAuth: (projectPath: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
 }
 
 // Feature Suggestions types
@@ -1453,6 +1469,15 @@ function createMockWorktreeAPI(): WorktreeAPI {
         options,
       });
       return { success: true, mergedBranch: branchName };
+    },
+
+    clone: async (repoUrl: string, worktreePath: string, branchName?: string) => {
+      console.log('[Mock] Cloning worktree:', {
+        repoUrl,
+        worktreePath,
+        branchName,
+      });
+      return { success: true };
     },
 
     getInfo: async (projectPath: string, featureId: string) => {
@@ -3139,6 +3164,18 @@ function createMockGitHubAPI(): GitHubAPI {
         totalCount: 0,
         hasNextPage: false,
       };
+    },
+    setAuth: async (projectPath: string, token: string) => {
+      console.log('[Mock] Setting GitHub auth:', { projectPath, token: '***' });
+      return { success: true };
+    },
+    getAuth: async (projectPath: string) => {
+      console.log('[Mock] Getting GitHub auth status:', { projectPath });
+      return { success: true, hasToken: true };
+    },
+    removeAuth: async (projectPath: string) => {
+      console.log('[Mock] Removing GitHub auth:', { projectPath });
+      return { success: true };
     },
   };
 }
