@@ -50,12 +50,18 @@ export class GithubAuthService {
     private async saveConfig(): Promise<void> {
         try {
             const dir = path.dirname(this.configPath);
+            // Always try to ensure directory exists
             try {
-                await secureFs.access(dir);
-            } catch {
                 await secureFs.mkdir(dir, { recursive: true });
+            } catch (error) {
+                // Ignore if it already exists, otherwise log
+                if ((error as any).code !== 'EEXIST') {
+                    logger.warn(`Failed to create directory ${dir}:`, error);
+                }
             }
+
             await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2), { mode: 0o600 });
+            logger.info(`Saved GitHub auth config to ${this.configPath}`);
         } catch (error) {
             logger.error('Failed to save GitHub auth config:', error);
             throw error;
