@@ -1,4 +1,4 @@
-// @ts-nocheck
+import type { JSX } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Globe, Loader2, CircleDot, GitPullRequest } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -41,10 +41,12 @@ interface WorktreeTabProps {
   onCreatePR: (worktree: WorktreeInfo) => void;
   onAddressPRComments: (worktree: WorktreeInfo, prInfo: PRInfo) => void;
   onResolveConflicts: (worktree: WorktreeInfo) => void;
+  onMerge: (worktree: WorktreeInfo) => void;
   onDeleteWorktree: (worktree: WorktreeInfo) => void;
   onStartDevServer: (worktree: WorktreeInfo) => void;
   onStopDevServer: (worktree: WorktreeInfo) => void;
   onOpenDevServerUrl: (worktree: WorktreeInfo) => void;
+  onViewDevServerLogs: (worktree: WorktreeInfo) => void;
   onRunInitScript: (worktree: WorktreeInfo) => void;
   hasInitScript: boolean;
 }
@@ -83,10 +85,12 @@ export function WorktreeTab({
   onCreatePR,
   onAddressPRComments,
   onResolveConflicts,
+  onMerge,
   onDeleteWorktree,
   onStartDevServer,
   onStopDevServer,
   onOpenDevServerUrl,
+  onViewDevServerLogs,
   onRunInitScript,
   hasInitScript,
 }: WorktreeTabProps) {
@@ -298,20 +302,29 @@ export function WorktreeTab({
       )}
 
       {isDevServerRunning && (
-        <Button
-          variant={isSelected ? 'default' : 'outline'}
-          size="sm"
-          className={cn(
-            'h-7 w-7 p-0 rounded-none border-r-0',
-            isSelected && 'bg-primary text-primary-foreground',
-            !isSelected && 'bg-secondary/50 hover:bg-secondary',
-            'text-green-500'
-          )}
-          onClick={() => onOpenDevServerUrl(worktree)}
-          title={`Open dev server (port ${devServerInfo?.port})`}
-        >
-          <Globe className="w-3 h-3" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={isSelected ? 'default' : 'outline'}
+                size="sm"
+                className={cn(
+                  'h-7 w-7 p-0 rounded-none border-r-0',
+                  isSelected && 'bg-primary text-primary-foreground',
+                  !isSelected && 'bg-secondary/50 hover:bg-secondary',
+                  'text-green-500'
+                )}
+                onClick={() => onOpenDevServerUrl(worktree)}
+                aria-label={`Open dev server on port ${devServerInfo?.port} in browser`}
+              >
+                <Globe className="w-3 h-3" aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Open dev server (:{devServerInfo?.port})</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
 
       <WorktreeActionsDropdown
@@ -333,10 +346,12 @@ export function WorktreeTab({
         onCreatePR={onCreatePR}
         onAddressPRComments={onAddressPRComments}
         onResolveConflicts={onResolveConflicts}
+        onMerge={onMerge}
         onDeleteWorktree={onDeleteWorktree}
         onStartDevServer={onStartDevServer}
         onStopDevServer={onStopDevServer}
         onOpenDevServerUrl={onOpenDevServerUrl}
+        onViewDevServerLogs={onViewDevServerLogs}
         onRunInitScript={onRunInitScript}
         hasInitScript={hasInitScript}
       />

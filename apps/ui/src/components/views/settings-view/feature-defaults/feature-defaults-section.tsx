@@ -10,6 +10,8 @@ import {
   ScrollText,
   ShieldCheck,
   FastForward,
+  Sparkles,
+  Cpu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -19,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { PhaseModelEntry } from '@automaker/types';
+import { PhaseModelSelector } from '../model-defaults/phase-model-selector';
 
 type PlanningMode = 'skip' | 'lite' | 'spec' | 'full';
 
@@ -28,11 +32,15 @@ interface FeatureDefaultsSectionProps {
   skipVerificationInAutoMode: boolean;
   defaultPlanningMode: PlanningMode;
   defaultRequirePlanApproval: boolean;
+  enableAiCommitMessages: boolean;
+  defaultFeatureModel: PhaseModelEntry;
   onDefaultSkipTestsChange: (value: boolean) => void;
   onEnableDependencyBlockingChange: (value: boolean) => void;
   onSkipVerificationInAutoModeChange: (value: boolean) => void;
   onDefaultPlanningModeChange: (value: PlanningMode) => void;
   onDefaultRequirePlanApprovalChange: (value: boolean) => void;
+  onEnableAiCommitMessagesChange: (value: boolean) => void;
+  onDefaultFeatureModelChange: (value: PhaseModelEntry) => void;
 }
 
 export function FeatureDefaultsSection({
@@ -41,11 +49,15 @@ export function FeatureDefaultsSection({
   skipVerificationInAutoMode,
   defaultPlanningMode,
   defaultRequirePlanApproval,
+  enableAiCommitMessages,
+  defaultFeatureModel,
   onDefaultSkipTestsChange,
   onEnableDependencyBlockingChange,
   onSkipVerificationInAutoModeChange,
   onDefaultPlanningModeChange,
   onDefaultRequirePlanApprovalChange,
+  onEnableAiCommitMessagesChange,
+  onDefaultFeatureModelChange,
 }: FeatureDefaultsSectionProps) {
   return (
     <div
@@ -68,6 +80,30 @@ export function FeatureDefaultsSection({
         </p>
       </div>
       <div className="p-6 space-y-5">
+        {/* Default Feature Model Setting */}
+        <div className="group flex items-start space-x-3 p-3 rounded-xl hover:bg-accent/30 transition-colors duration-200 -mx-3">
+          <div className="w-10 h-10 mt-0.5 rounded-xl flex items-center justify-center shrink-0 bg-brand-500/10">
+            <Cpu className="w-5 h-5 text-brand-500" />
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-foreground font-medium">Default Model</Label>
+              <PhaseModelSelector
+                value={defaultFeatureModel}
+                onChange={onDefaultFeatureModelChange}
+                compact
+                align="end"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground/80 leading-relaxed">
+              The default AI model and thinking level used when creating new feature cards.
+            </p>
+          </div>
+        </div>
+
+        {/* Separator */}
+        <div className="border-t border-border/30" />
+
         {/* Planning Mode Default */}
         <div className="group flex items-start space-x-3 p-3 rounded-xl hover:bg-accent/30 transition-colors duration-200 -mx-3">
           <div
@@ -165,12 +201,11 @@ export function FeatureDefaultsSection({
                 </p>
               </div>
             </div>
-            <div className="border-t border-border/30" />
           </>
         )}
 
         {/* Separator */}
-        {defaultPlanningMode === 'skip' && <div className="border-t border-border/30" />}
+        <div className="border-t border-border/30" />
 
         {/* Automated Testing Setting */}
         <div className="group flex items-start space-x-3 p-3 rounded-xl hover:bg-accent/30 transition-colors duration-200 -mx-3">
@@ -248,6 +283,34 @@ export function FeatureDefaultsSection({
               When enabled, auto mode will grab features even if their dependencies are not
               verified, as long as they are not currently running. This allows faster pipeline
               execution without waiting for manual verification.
+            </p>
+          </div>
+        </div>
+
+        {/* Separator */}
+        <div className="border-t border-border/30" />
+
+        {/* AI Commit Messages Setting */}
+        <div className="group flex items-start space-x-3 p-3 rounded-xl hover:bg-accent/30 transition-colors duration-200 -mx-3">
+          <Checkbox
+            id="enable-ai-commit-messages"
+            checked={enableAiCommitMessages}
+            onCheckedChange={(checked) => onEnableAiCommitMessagesChange(checked === true)}
+            className="mt-1"
+            data-testid="enable-ai-commit-messages-checkbox"
+          />
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="enable-ai-commit-messages"
+              className="text-foreground cursor-pointer font-medium flex items-center gap-2"
+            >
+              <Sparkles className="w-4 h-4 text-brand-500" />
+              Generate AI commit messages
+            </Label>
+            <p className="text-xs text-muted-foreground/80 leading-relaxed">
+              When enabled, opening the commit dialog will automatically generate a commit message
+              using AI based on your staged or unstaged changes. You can configure the model used in
+              Model Defaults.
             </p>
           </div>
         </div>

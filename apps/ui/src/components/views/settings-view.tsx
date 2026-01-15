@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearch } from '@tanstack/react-router';
 import { useAppStore } from '@/store/app-store';
-import { useSetupStore } from '@/store/setup-store';
 
 import { useSettingsView, type SettingsViewId } from './settings-view/hooks';
 import { NAV_ITEMS } from './settings-view/config/navigation';
@@ -30,6 +30,9 @@ import { PromptCustomizationSection } from './settings-view/prompts';
 import type { Project as SettingsProject, Theme } from './settings-view/shared/types';
 import type { Project as ElectronProject } from '@/lib/electron';
 
+// Breakpoint constant for mobile (matches Tailwind lg breakpoint)
+const LG_BREAKPOINT = 1024;
+
 export function SettingsView() {
   const {
     theme,
@@ -41,6 +44,8 @@ export function SettingsView() {
     setEnableDependencyBlocking,
     skipVerificationInAutoMode,
     setSkipVerificationInAutoMode,
+    enableAiCommitMessages,
+    setEnableAiCommitMessages,
     useWorktrees,
     setUseWorktrees,
     muteDoneSound,
@@ -51,6 +56,8 @@ export function SettingsView() {
     setDefaultPlanningMode,
     defaultRequirePlanApproval,
     setDefaultRequirePlanApproval,
+    defaultFeatureModel,
+    setDefaultFeatureModel,
     autoLoadClaudeMd,
     setAutoLoadClaudeMd,
     promptCustomization,
@@ -67,6 +74,8 @@ export function SettingsView() {
       name: project.name,
       path: project.path,
       theme: project.theme as Theme | undefined,
+      icon: project.icon,
+      customIconPath: project.customIconPath,
     };
   };
 
@@ -86,8 +95,11 @@ export function SettingsView() {
     }
   };
 
+  // Get initial view from URL search params
+  const { view: initialView } = useSearch({ from: '/settings' });
+
   // Use settings view navigation hook
-  const { activeView, navigateTo } = useSettingsView();
+  const { activeView, navigateTo } = useSettingsView({ initialView });
 
   // Handle navigation - if navigating to 'providers', default to 'claude-provider'
   const handleNavigate = (viewId: SettingsViewId) => {
@@ -100,6 +112,33 @@ export function SettingsView() {
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showKeyboardMapDialog, setShowKeyboardMapDialog] = useState(false);
+
+  // Mobile navigation state - default to showing on desktop, hidden on mobile
+  const [showNavigation, setShowNavigation] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= LG_BREAKPOINT;
+    }
+    return true; // Default to showing on SSR
+  });
+
+  // Auto-close navigation on mobile when a section is selected
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < LG_BREAKPOINT) {
+      setShowNavigation(false);
+    }
+  }, [activeView]);
+
+  // Handle window resize to show/hide navigation appropriately
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= LG_BREAKPOINT) {
+        setShowNavigation(true);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Render the active section based on current view
   const renderActiveSection = () => {
@@ -152,11 +191,15 @@ export function SettingsView() {
             skipVerificationInAutoMode={skipVerificationInAutoMode}
             defaultPlanningMode={defaultPlanningMode}
             defaultRequirePlanApproval={defaultRequirePlanApproval}
+            enableAiCommitMessages={enableAiCommitMessages}
+            defaultFeatureModel={defaultFeatureModel}
             onDefaultSkipTestsChange={setDefaultSkipTests}
             onEnableDependencyBlockingChange={setEnableDependencyBlocking}
             onSkipVerificationInAutoModeChange={setSkipVerificationInAutoMode}
             onDefaultPlanningModeChange={setDefaultPlanningMode}
             onDefaultRequirePlanApprovalChange={setDefaultRequirePlanApproval}
+            onEnableAiCommitMessagesChange={setEnableAiCommitMessages}
+            onDefaultFeatureModelChange={setDefaultFeatureModel}
           />
         );
       case 'worktrees':
@@ -187,20 +230,25 @@ export function SettingsView() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden content-bg" data-testid="settings-view">
       {/* Header Section */}
-      <SettingsHeader />
+      <SettingsHeader
+        showNavigation={showNavigation}
+        onToggleNavigation={() => setShowNavigation(!showNavigation)}
+      />
 
       {/* Content Area with Sidebar */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Side Navigation - No longer scrolls, just switches views */}
+        {/* Side Navigation - Overlay on mobile, sidebar on desktop */}
         <SettingsNavigation
           navItems={NAV_ITEMS}
           activeSection={activeView}
           currentProject={currentProject}
           onNavigate={handleNavigate}
+          isOpen={showNavigation}
+          onClose={() => setShowNavigation(false)}
         />
 
         {/* Content Panel - Shows only the active section */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 lg:p-8">
           <div className="max-w-4xl mx-auto">{renderActiveSection()}</div>
         </div>
       </div>

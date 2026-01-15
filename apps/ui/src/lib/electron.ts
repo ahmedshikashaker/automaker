@@ -10,7 +10,9 @@ import type {
   IssueValidationResponse,
   IssueValidationEvent,
   StoredValidation,
-  AgentModel,
+  ModelId,
+  ThinkingLevel,
+  ReasoningEffort,
   GitHubComment,
   IssueCommentsResult,
   Idea,
@@ -314,7 +316,9 @@ export interface GitHubAPI {
   validateIssue: (
     projectPath: string,
     issue: IssueValidationInput,
-    model?: AgentModel
+    model?: ModelId,
+    thinkingLevel?: ThinkingLevel,
+    reasoningEffort?: ReasoningEffort
   ) => Promise<{ success: boolean; message?: string; issueNumber?: number; error?: string }>;
   /** Check validation status for an issue or all issues */
   getValidationStatus: (
@@ -520,7 +524,7 @@ export interface AutoModeAPI {
     featureId: string,
     prompt: string,
     imagePaths?: string[],
-    worktreePath?: string
+    useWorktrees?: boolean
   ) => Promise<{ success: boolean; passes?: boolean; error?: string }>;
   commitFeature: (
     projectPath: string,
@@ -1294,6 +1298,7 @@ interface SetupAPI {
     success: boolean;
     hasAnthropicKey: boolean;
     hasGoogleKey: boolean;
+    hasOpenaiKey: boolean;
   }>;
   deleteApiKey: (
     provider: string
@@ -1377,6 +1382,7 @@ function createMockSetupAPI(): SetupAPI {
         success: true,
         hasAnthropicKey: false,
         hasGoogleKey: false,
+        hasOpenaiKey: false,
       };
     },
 
@@ -1434,13 +1440,19 @@ function createMockSetupAPI(): SetupAPI {
 // Mock Worktree API implementation
 function createMockWorktreeAPI(): WorktreeAPI {
   return {
-    mergeFeature: async (projectPath: string, featureId: string, options?: object) => {
+    mergeFeature: async (
+      projectPath: string,
+      branchName: string,
+      worktreePath: string,
+      options?: object
+    ) => {
       console.log('[Mock] Merging feature:', {
         projectPath,
-        featureId,
+        branchName,
+        worktreePath,
         options,
       });
-      return { success: true, mergedBranch: `feature/${featureId}` };
+      return { success: true, mergedBranch: branchName };
     },
 
     getInfo: async (projectPath: string, featureId: string) => {
@@ -1534,6 +1546,14 @@ function createMockWorktreeAPI(): WorktreeAPI {
           branch: 'feature-branch',
           message,
         },
+      };
+    },
+
+    generateCommitMessage: async (worktreePath: string) => {
+      console.log('[Mock] Generating commit message for:', worktreePath);
+      return {
+        success: true,
+        message: 'feat: Add mock commit message generation',
       };
     },
 
@@ -1757,6 +1777,22 @@ function createMockWorktreeAPI(): WorktreeAPI {
         result: {
           servers: [],
         },
+      };
+    },
+
+    getDevServerLogs: async (worktreePath: string) => {
+      console.log('[Mock] Getting dev server logs:', { worktreePath });
+      return {
+        success: false,
+        error: 'No dev server running for this worktree',
+      };
+    },
+
+    onDevServerLogEvent: (callback) => {
+      console.log('[Mock] Subscribing to dev server log events');
+      // Return unsubscribe function
+      return () => {
+        console.log('[Mock] Unsubscribing from dev server log events');
       };
     },
 
@@ -2083,7 +2119,7 @@ function createMockAutoModeAPI(): AutoModeAPI {
       featureId: string,
       prompt: string,
       imagePaths?: string[],
-      worktreePath?: string
+      useWorktrees?: boolean
     ) => {
       if (mockRunningFeatures.has(featureId)) {
         return {
@@ -3008,8 +3044,20 @@ function createMockGitHubAPI(): GitHubAPI {
         mergedPRs: [],
       };
     },
-    validateIssue: async (projectPath: string, issue: IssueValidationInput, model?: AgentModel) => {
-      console.log('[Mock] Starting async validation:', { projectPath, issue, model });
+    validateIssue: async (
+      projectPath: string,
+      issue: IssueValidationInput,
+      model?: ModelId,
+      thinkingLevel?: ThinkingLevel,
+      reasoningEffort?: ReasoningEffort
+    ) => {
+      console.log('[Mock] Starting async validation:', {
+        projectPath,
+        issue,
+        model,
+        thinkingLevel,
+        reasoningEffort,
+      });
 
       // Simulate async validation in background
       setTimeout(() => {
@@ -3104,6 +3152,8 @@ export interface Project {
   lastOpened?: string;
   theme?: string; // Per-project theme override (uses ThemeMode from app-store)
   isFavorite?: boolean; // Pin project to top of dashboard
+  icon?: string; // Lucide icon name for project identification
+  customIconPath?: string; // Path to custom uploaded icon image in .automaker/images/
 }
 
 export interface TrashedProject extends Project {

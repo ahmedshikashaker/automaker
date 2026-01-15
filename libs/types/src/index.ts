@@ -79,6 +79,7 @@ export {
   type ModelAlias,
   type CodexModelId,
   type AgentModel,
+  type ModelId,
 } from './model.js';
 
 // Event types
@@ -98,11 +99,13 @@ export type {
   AgentPrompts,
   BacklogPlanPrompts,
   EnhancementPrompts,
+  CommitMessagePrompts,
   PromptCustomization,
   ResolvedAutoModePrompts,
   ResolvedAgentPrompts,
   ResolvedBacklogPlanPrompts,
   ResolvedEnhancementPrompts,
+  ResolvedCommitMessagePrompts,
 } from './prompts.js';
 export { DEFAULT_PROMPT_CUSTOMIZATION } from './prompts.js';
 
