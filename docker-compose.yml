@@ -66,7 +66,7 @@ services:
       - DATA_DIR=/data
 
       # Optional - CORS origin (default allows all)
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:9000}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:9000,http://localhost:3000,https://autoclaude.staging.hamzahllc.com}
 
       # Internal - indicates the API is running in a containerized sandbox environment
       # This is used by the UI to determine if sandbox risk warnings should be shown
