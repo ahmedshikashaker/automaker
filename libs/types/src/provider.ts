@@ -95,6 +95,8 @@ export interface AgentDefinition {
  */
 export interface ExecuteOptions {
   prompt: string | Array<{ type: string; text?: string; source?: object }>;
+  /** Optional API Key override for this execution */
+  apiKey?: string;
   /** Bare model ID without provider prefix (e.g., "gpt-5.1-codex-max", "composer-1") */
   model: string;
   /** Original model ID with provider prefix for logging (e.g., "codex-gpt-5.1-codex-max") */

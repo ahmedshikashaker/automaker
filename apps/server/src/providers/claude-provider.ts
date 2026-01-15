@@ -128,8 +128,17 @@ export class ClaudeProvider extends BaseProvider {
         if (!envKeysToRestore.includes('ANTHROPIC_API_KEY')) {
           envKeysToRestore.push('ANTHROPIC_API_KEY');
         }
-        process.env.ANTHROPIC_API_KEY = settingsEnv.ANTHROPIC_AUTH_TOKEN;
       }
+    }
+
+    // Map ANTHROPIC_AUTH_TOKEN from process.env if ANTHROPIC_API_KEY is missing
+    // This allows .env configuration (which uses AUTH_TOKEN) to work as a global fallback
+    if (process.env.ANTHROPIC_AUTH_TOKEN && !process.env.ANTHROPIC_API_KEY) {
+      originalEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+      if (!envKeysToRestore.includes('ANTHROPIC_API_KEY')) {
+        envKeysToRestore.push('ANTHROPIC_API_KEY');
+      }
+      process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_AUTH_TOKEN;
     }
 
     // If no API key env var is set yet (from settings or original env), try in-memory storage
@@ -156,8 +165,12 @@ export class ClaudeProvider extends BaseProvider {
       env: {
         ...buildEnv(),
         ...(settingsEnv || {}),
-        // Ensure ANTHROPIC_API_KEY uses the final value (which might be from settings or memory)
-        ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
+        // Ensure ANTHROPIC_API_KEY uses the final value (options.apiKey > settings > env)
+        ...(options.apiKey
+          ? { ANTHROPIC_API_KEY: options.apiKey }
+          : process.env.ANTHROPIC_API_KEY
+            ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY }
+            : {}),
       },
       // Pass through allowedTools if provided by caller (decided by sdk-options.ts)
       ...(allowedTools && { allowedTools }),

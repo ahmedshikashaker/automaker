@@ -156,9 +156,13 @@ export function getCodexCliPaths(): string[] {
   return [
     // Standard locations
     path.join(homeDir, '.local', 'bin', 'codex'),
+    path.join(homeDir, '.local', 'bin', 'cursor-agent'), // Added cursor-agent
     '/opt/homebrew/bin/codex',
+    '/opt/homebrew/bin/cursor-agent',
     '/usr/local/bin/codex',
+    '/usr/local/bin/cursor-agent',
     '/usr/bin/codex',
+    '/usr/bin/cursor-agent',
     path.join(homeDir, '.npm-global', 'bin', 'codex'),
     // Linuxbrew
     '/home/linuxbrew/.linuxbrew/bin/codex',
@@ -171,6 +175,7 @@ export function getCodexCliPaths(): string[] {
     path.join(homeDir, '.config', 'yarn', 'global', 'node_modules', '.bin', 'codex'),
     // Snap packages
     '/snap/bin/codex',
+    '/snap/bin/cursor-agent',
     // NVM paths
     ...nvmBinPaths,
     // fnm paths

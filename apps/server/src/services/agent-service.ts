@@ -274,6 +274,38 @@ export class AgentService {
           ? await getCustomSubagents(this.settingsService, effectiveWorkDir)
           : undefined;
 
+      // Check for project-specific API key overrides
+      let apiKeyOverride: string | undefined;
+      if (this.settingsService) {
+        try {
+          // Check project settings first
+          const projectSettings = await this.settingsService.getProjectSettings(effectiveWorkDir);
+          if (projectSettings.apiKeys?.anthropic) {
+            apiKeyOverride = projectSettings.apiKeys.anthropic;
+            this.logger.info(`Using project-specific Anthropic API key for ${sessionId}`);
+          }
+        } catch (error) {
+          this.logger.warn('Failed to check project settings for API key:', error);
+        }
+      }
+
+      // If no key from settings, check environment variables using project name
+      if (!apiKeyOverride) {
+        const projectName = path.basename(effectiveWorkDir);
+        const normalizedName = projectName.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+
+        // Check exact match, normalized match, and prefixed match
+        const envKeyCandidates = [projectName, normalizedName, `ANTHROPIC_KEY_${normalizedName}`];
+
+        for (const key of envKeyCandidates) {
+          if (process.env[key]) {
+            apiKeyOverride = process.env[key];
+            this.logger.info(`Using environment variable project key (${key}) for ${sessionId}`);
+            break;
+          }
+        }
+      }
+
       // Load project context files (CLAUDE.md, CODE_QUALITY.md, etc.) and memory files
       // Use the user's message as task context for smart memory selection
       const contextResult = await loadContextFiles({
@@ -378,6 +410,7 @@ export class AgentService {
         agents: customSubagents, // Pass custom subagents for task delegation
         thinkingLevel: effectiveThinkingLevel, // Pass thinking level for Claude models
         reasoningEffort: effectiveReasoningEffort, // Pass reasoning effort for Codex models
+        apiKey: apiKeyOverride, // Pass project-specific API key if found
       };
 
       // Build prompt content with images

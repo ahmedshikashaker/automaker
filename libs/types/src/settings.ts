@@ -626,6 +626,13 @@ export interface ProjectSettings {
    * Value: agent configuration
    */
   customSubagents?: Record<string, import('./provider.js').AgentDefinition>;
+
+  // API Credentials
+  /** Per-project API key overrides */
+  apiKeys?: {
+    /** Anthropic API Key override */
+    anthropic?: string;
+  };
 }
 
 /**
