@@ -153,7 +153,9 @@ const getServerUrl = (): string => {
     const envUrl = import.meta.env.VITE_SERVER_URL;
     if (envUrl) return envUrl;
   }
-  return 'http://localhost:3008';
+  // Default to relative path (proxied by Nginx) in production
+  // or fallback to localhost during local dev if not proxied
+  return '';
 };
 
 /**
