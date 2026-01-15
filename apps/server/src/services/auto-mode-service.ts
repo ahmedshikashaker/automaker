@@ -2502,6 +2502,43 @@ This mock response was generated because AUTOMAKER_MOCK_AGENT=true was set.
       );
     }
 
+    // Check for project-specific API key overrides
+    let apiKeyOverride: string | undefined;
+    if (this.settingsService) {
+      try {
+        // Check project settings first
+        const projectSettings = await this.settingsService.getProjectSettings(finalProjectPath);
+        if (projectSettings.apiKeys?.anthropic) {
+          apiKeyOverride = projectSettings.apiKeys.anthropic;
+          logger.info(`[AutoMode] Found project-specific Anthropic API key override via settings`);
+        }
+      } catch (error) {
+        logger.warn('[AutoMode] Failed to check project settings for API key:', error);
+      }
+    }
+
+    // If no key from settings, check environment variables using project name
+    if (!apiKeyOverride) {
+      const projectName = path.basename(finalProjectPath);
+      const normalizedName = projectName.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+
+      // Check exact match, normalized match, and prefixed match
+      const envKeyCandidates = [projectName, normalizedName, `ANTHROPIC_KEY_${normalizedName}`];
+
+      for (const key of envKeyCandidates) {
+        if (process.env[key]) {
+          apiKeyOverride = process.env[key];
+          logger.info(`[AutoMode] Using environment variable project key (${key})`);
+          break;
+        }
+      }
+    }
+
+    logger.info(`[AutoMode] Execution options prepared`, {
+      hasApiKey: !!apiKeyOverride,
+      workDir,
+    });
+
     const executeOptions: ExecuteOptions = {
       prompt: promptContent,
       model: bareModel,
@@ -2513,6 +2550,7 @@ This mock response was generated because AUTOMAKER_MOCK_AGENT=true was set.
       settingSources: sdkOptions.settingSources,
       mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined, // Pass MCP servers configuration
       thinkingLevel: options?.thinkingLevel, // Pass thinking level for extended thinking
+      apiKey: apiKeyOverride,
     };
 
     // Execute via provider
